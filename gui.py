@@ -4,6 +4,7 @@ import threading
 import time
 import random
 import urllib.request
+import numpy as np
 import tkinter as tk
 from tkinter import filedialog
 from PIL import Image, ImageTk, ImageFilter
@@ -129,6 +130,7 @@ class DepthClockGUI(ctk.CTk):
             "depth_map_path": "",
             "threshold": 128,
             "blur_radius": 2,
+            "transition_width": 10,
             "font_family": "Segoe UI",
             "font_size": 120,
             "color": "#FFFFFF",
@@ -236,6 +238,14 @@ class DepthClockGUI(ctk.CTk):
         
         self.blur_val_lbl = ctk.CTkLabel(depth_tab, text=f"Radius: {self.config_data['blur_radius']}px", font=("Segoe UI", 12))
         self.blur_val_lbl.pack(anchor="e")
+        
+        ctk.CTkLabel(depth_tab, text="Edge Detail (Smoothstep Width)", font=("Segoe UI", 13, "bold")).pack(anchor="w", pady=(10, 5))
+        self.transition_slider = ctk.CTkSlider(depth_tab, from_=1, to=50, command=self.on_transition_changed)
+        self.transition_slider.set(self.config_data.get("transition_width", 10))
+        self.transition_slider.pack(fill="x", pady=5)
+        
+        self.transition_val_lbl = ctk.CTkLabel(depth_tab, text=f"Width: {self.config_data.get('transition_width', 10)}px", font=("Segoe UI", 12))
+        self.transition_val_lbl.pack(anchor="e")
         
         # --- CLOCK STYLE TAB ---
         ctk.CTkLabel(clock_tab, text="Font Family", font=("Segoe UI", 13, "bold")).pack(anchor="w", pady=(5, 5))
@@ -369,7 +379,6 @@ class DepthClockGUI(ctk.CTk):
                 self.config_data["wallpaper_path"] = RANDOM_WP_PATH
                 self.save_config()
                 
-                # Automatically process it
                 self.process_wallpaper(RANDOM_WP_PATH)
             except Exception as e:
                 self.after(0, lambda: self.info_lbl.configure(text=f"Download Error: {e}"))
@@ -411,6 +420,11 @@ class DepthClockGUI(ctk.CTk):
         self.blur_slider.set(blur)
         self.blur_val_lbl.configure(text=f"Radius: {blur}px")
         self.config_data["blur_radius"] = blur
+        
+        trans = random.randint(5, 25)
+        self.transition_slider.set(trans)
+        self.transition_val_lbl.configure(text=f"Width: {trans}px")
+        self.config_data["transition_width"] = trans
         
         # Save and update preview
         self.save_config()
@@ -500,8 +514,6 @@ class DepthClockGUI(ctk.CTk):
         
         # 2. Draw Clock & Date
         font_family = self.font_combobox.get()
-        # Scale down clock size for preview based on true resolution scaling
-        # (Preview Canvas height is proportional to screen height now)
         scale_factor = self.preview_canvas_w / self.screen_w
         preview_font_size = max(10, int(self.config_data["font_size"] * scale_factor))
         
@@ -541,9 +553,15 @@ class DepthClockGUI(ctk.CTk):
             anchor="center"
         )
         
-        # 3. Masked Foreground layer
-        # Apply threshold to the depth image
-        mask = self.raw_depth_image.point(lambda p: 255 if p >= threshold else 0)
+        # 3. Masked Foreground layer with smoothstep anti-aliasing
+        depth_np = np.array(self.raw_depth_image, dtype=np.float32)
+        w = max(1, int(self.config_data.get("transition_width", 10)))
+        t = (depth_np - (threshold - w)) / (2 * w)
+        t = np.clip(t, 0.0, 1.0)
+        
+        alpha_np = (255 * (3 * t**2 - 2 * t**3)).astype(np.uint8)
+        mask = Image.fromarray(alpha_np)
+        
         if blur_radius > 0:
             mask = mask.filter(ImageFilter.GaussianBlur(blur_radius))
             
@@ -563,6 +581,12 @@ class DepthClockGUI(ctk.CTk):
     def on_blur_changed(self, value):
         self.config_data["blur_radius"] = int(value)
         self.blur_val_lbl.configure(text=f"Radius: {int(value)}px")
+        self.save_config()
+        self.update_preview()
+        
+    def on_transition_changed(self, value):
+        self.config_data["transition_width"] = int(value)
+        self.transition_val_lbl.configure(text=f"Width: {int(value)}px")
         self.save_config()
         self.update_preview()
         

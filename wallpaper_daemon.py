@@ -2,8 +2,12 @@ import os
 import time
 import json
 import ctypes
+import numpy as np
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 import win32api
+import win32gui
+import win32con
+import win32process
 
 APP_DIR = os.path.join(os.path.expanduser("~"), ".depthclock")
 CONFIG_PATH = os.path.join(APP_DIR, "config.json")
@@ -39,6 +43,33 @@ def resize_to_fill(img, target_w, target_h):
 def set_desktop_wallpaper(image_path):
     ctypes.windll.user32.SystemParametersInfoW(20, 0, image_path, 3)
 
+def is_fullscreen_app_active(screen_w, screen_h):
+    """
+    Checks if the active foreground window is fullscreen.
+    If so, we can pause the background clock rendering to save resources.
+    """
+    hwnd = win32gui.GetForegroundWindow()
+    if not hwnd:
+        return False
+        
+    class_name = win32gui.GetClassName(hwnd)
+    
+    # Ignore Windows Desktop/Shell itself
+    if class_name in ["WorkerW", "Progman", "Shell_TrayWnd", "DV2ControlHost"]:
+        return False
+        
+    try:
+        rect = win32gui.GetWindowRect(hwnd)
+        width = rect[2] - rect[0]
+        height = rect[3] - rect[1]
+        
+        # Check if the active window matches or exceeds primary monitor bounds
+        if width >= screen_w and height >= screen_h:
+            return True
+    except:
+        pass
+    return False
+
 def render_and_apply():
     if not os.path.exists(CONFIG_PATH):
         return False
@@ -54,25 +85,22 @@ def render_and_apply():
     depth_map_path = config.get("depth_map_path", "")
     threshold = config.get("threshold", 128)
     blur_radius = config.get("blur_radius", 2)
-    
-    # Get primary screen size
-    screen_w = win32api.GetSystemMetrics(0)
-    screen_h = win32api.GetSystemMetrics(1)
+    transition_width = config.get("transition_width", 10) # Smoothstep transition ramp width
     
     # Clock and Date configurations
     font_family = config.get("font_family", "Segoe UI")
     font_size = config.get("font_size", 120)
     color = config.get("color", "#FFFFFF")
-    
-    # Use relative ratios to calculate pixel coordinates (immune to DPI scaling differences)
-    pos_x = int(screen_w * config.get("pos_x_ratio", 0.5))
-    pos_y = int(screen_h * config.get("pos_y_ratio", 0.3))
     format_24h = config.get("format_24h", True)
     show_date = config.get("show_date", True)
     
     if not os.path.exists(wallpaper_path):
         return False
         
+    # Get primary screen size
+    screen_w = win32api.GetSystemMetrics(0)
+    screen_h = win32api.GetSystemMetrics(1)
+    
     # 1. Load wallpaper and crop to cover screen
     wp_raw = Image.open(wallpaper_path).convert("RGBA")
     wp_img = resize_to_fill(wp_raw, screen_w, screen_h)
@@ -80,6 +108,10 @@ def render_and_apply():
     # 2. Draw text on a copy of the wallpaper
     bg_with_clock = wp_img.copy()
     draw = ImageDraw.Draw(bg_with_clock)
+    
+    # Use relative ratios to calculate pixel coordinates
+    pos_x = int(screen_w * config.get("pos_x_ratio", 0.5))
+    pos_y = int(screen_h * config.get("pos_y_ratio", 0.3))
     
     # Load fonts
     try:
@@ -95,7 +127,6 @@ def render_and_apply():
         date_str = time.strftime(config.get("date_format", "%a, %b %d"))
         date_font_size = max(12, int(font_size * 0.3))
         try:
-            # Re-use font family for date
             date_font_path = os.path.join(os.environ.get("WINDIR", "C:\\Windows"), "Fonts", f"{font_family.lower()}.ttf")
             if not os.path.exists(date_font_path):
                 date_font_path = os.path.join(os.environ.get("WINDIR", "C:\\Windows"), "Fonts", "arialbd.ttf")
@@ -111,17 +142,27 @@ def render_and_apply():
     time_format = "%H:%M" if format_24h else "%I:%M %p"
     time_str = time.strftime(time_format)
     if time_str.startswith("0") and not format_24h:
-        time_str = time_str[1:] # strip leading zero for 12h format
+        time_str = time_str[1:]
         
     draw.text((pos_x, pos_y), time_str, font=font, fill=color, anchor="mm")
     
-    # 3. Apply foreground mask on top
+    # 3. Apply foreground mask on top using Smoothstep edge anti-aliasing
     if os.path.exists(depth_map_path):
         depth_raw = Image.open(depth_map_path).convert("L")
         depth_img = resize_to_fill(depth_raw, screen_w, screen_h)
         
-        # Threshold depth to create foreground mask
-        mask = depth_img.point(lambda p: 255 if p >= threshold else 0)
+        # Convert to numpy to apply guided smoothstep masking
+        depth_np = np.array(depth_img, dtype=np.float32)
+        
+        # Smoothstep: t = (depth - (threshold - w)) / (2 * w)
+        w = max(1, transition_width)
+        t = (depth_np - (threshold - w)) / (2 * w)
+        t = np.clip(t, 0.0, 1.0)
+        
+        # Cubic Hermite interpolation: 3t^2 - 2t^3
+        alpha_np = (255 * (3 * t**2 - 2 * t**3)).astype(np.uint8)
+        mask = Image.fromarray(alpha_np)
+        
         if blur_radius > 0:
             mask = mask.filter(ImageFilter.GaussianBlur(blur_radius))
             
@@ -139,12 +180,32 @@ def render_and_apply():
 
 def main():
     print("Depth Clock Daemon started.")
+    
+    # Get primary screen size for fullscreen check
+    screen_w = win32api.GetSystemMetrics(0)
+    screen_h = win32api.GetSystemMetrics(1)
+    
+    # Run once immediately
     render_and_apply()
     
     last_minute = -1
     last_config_mtime = 0
+    paused = False
     
     while True:
+        # Check if a fullscreen game or application is active
+        if is_fullscreen_app_active(screen_w, screen_h):
+            if not paused:
+                print("Fullscreen application active. Pausing wallpaper updates...")
+                paused = True
+            time.sleep(5.0) # Check less frequently while paused to save CPU
+            continue
+            
+        if paused:
+            print("Returned to desktop. Resuming wallpaper updates...")
+            paused = False
+            render_and_apply() # Force refresh immediately on resume
+            
         current_time_struct = time.localtime()
         current_minute = current_time_struct.tm_min
         

@@ -12,6 +12,8 @@ import customtkinter as ctk
 import win32api
 import win32con
 import ctypes
+import winreg
+import sys
 
 # Enable DPI Awareness to fix resolution and positioning issues on scaled displays
 try:
@@ -139,7 +141,8 @@ class DepthClockGUI(ctk.CTk):
             "format_24h": True,
             "show_date": True,
             "date_format": "%a, %b %d",
-            "date_y_offset_ratio": -0.074 # Relative offset (~ -80px on 1080p screen)
+            "date_y_offset_ratio": -0.074,
+            "sync_lockscreen": False
         }
         
         self.load_saved_config()
@@ -192,6 +195,46 @@ class DepthClockGUI(ctk.CTk):
         self.select_wp_btn.configure(state=val)
         self.rand_wp_btn.configure(state=val)
         self.rand_style_btn.configure(state=val)
+        
+    def is_startup_enabled(self):
+        key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+        try:
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_READ)
+            try:
+                winreg.QueryValueEx(key, "DepthClock")
+                return True
+            except FileNotFoundError:
+                return False
+            finally:
+                winreg.CloseKey(key)
+        except:
+            return False
+            
+    def set_startup(self, enabled):
+        key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+        script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "depth_clock.py"))
+        
+        # Configure run command using pythonw (no console window popups)
+        if sys.executable.endswith("python.exe"):
+            pythonw_exe = sys.executable.lower().replace("python.exe", "pythonw.exe")
+            cmd_str = f'"{pythonw_exe}" "{script_path}" --daemon'
+        else:
+            cmd_str = f'"{sys.executable}" --daemon'
+            
+        try:
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE)
+            if enabled:
+                winreg.SetValueEx(key, "DepthClock", 0, winreg.REG_SZ, cmd_str)
+                print("Registered startup boot hook.")
+            else:
+                try:
+                    winreg.DeleteValue(key, "DepthClock")
+                    print("Deregistered startup boot hook.")
+                except FileNotFoundError:
+                    pass
+            winreg.CloseKey(key)
+        except Exception as e:
+            print("Failed to update startup configuration registry:", e)
         
     def create_widgets(self):
         # Left Panel (Controls) - now scrollable to fit any screen resolution/scaling elegantly
@@ -285,7 +328,7 @@ class DepthClockGUI(ctk.CTk):
         self.suggested_color_frame = ctk.CTkFrame(clock_tab, fg_color="transparent")
         self.suggested_color_frame.pack(fill="x", pady=2)
         
-        ctk.CTkLabel(clock_tab, text="Time Options", font=("Segoe UI", 13, "bold")).pack(anchor="w", pady=(5, 5))
+        ctk.CTkLabel(clock_tab, text="System & Time Options", font=("Segoe UI", 13, "bold")).pack(anchor="w", pady=(5, 5))
         
         self.format_switch = ctk.CTkSwitch(clock_tab, text="24-Hour Format", command=self.on_format_changed)
         if self.config_data["format_24h"]:
@@ -300,6 +343,22 @@ class DepthClockGUI(ctk.CTk):
         else:
             self.date_switch.deselect()
         self.date_switch.pack(anchor="w", pady=2)
+        
+        # New Lockscreen Sync Switch
+        self.sync_lockscreen_switch = ctk.CTkSwitch(clock_tab, text="Sync to Lockscreen", command=self.on_sync_lockscreen_changed)
+        if self.config_data.get("sync_lockscreen", False):
+            self.sync_lockscreen_switch.select()
+        else:
+            self.sync_lockscreen_switch.deselect()
+        self.sync_lockscreen_switch.pack(anchor="w", pady=2)
+        
+        # New Run at Startup Switch
+        self.startup_switch = ctk.CTkSwitch(clock_tab, text="Run on Windows Startup", command=self.on_startup_changed)
+        if self.is_startup_enabled():
+            self.startup_switch.select()
+        else:
+            self.startup_switch.deselect()
+        self.startup_switch.pack(anchor="w", pady=2)
         
         # --- CLOCK POS TAB ---
         ctk.CTkLabel(position_tab, text="Horizontal Position (X)", font=("Segoe UI", 13, "bold")).pack(anchor="w", pady=(10, 5))
@@ -616,6 +675,14 @@ class DepthClockGUI(ctk.CTk):
         self.save_config()
         self.update_preview()
         
+    def on_sync_lockscreen_changed(self):
+        self.config_data["sync_lockscreen"] = self.sync_lockscreen_switch.get()
+        self.save_config()
+        # Preview doesn't change for lockscreen sync
+        
+    def on_startup_changed(self):
+        self.set_startup(self.startup_switch.get())
+        
     def on_pos_x_changed(self, value):
         self.config_data["pos_x_ratio"] = float(value)
         self.save_config()
@@ -644,9 +711,15 @@ class DepthClockGUI(ctk.CTk):
             except:
                 pass
                 
-        # Run wallpaper daemon process
+        # Run wallpaper daemon process (using pythonw to hide console windows)
         try:
-            cmd = ["python", "wallpaper_daemon.py"]
+            # Check if running python.exe to run pythonw.exe
+            if sys.executable.endswith("python.exe"):
+                pythonw_exe = sys.executable.lower().replace("python.exe", "pythonw.exe")
+            else:
+                pythonw_exe = sys.executable
+                
+            cmd = [pythonw_exe, "wallpaper_daemon.py"]
             self.renderer_process = subprocess.Popen(cmd, cwd=os.path.dirname(os.path.abspath(__file__)))
             self.set_status("Applied successfully!")
         except Exception as e:

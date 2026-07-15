@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.depthclock/
+config.json
+random_wallpaper.jpg
+wallpaper_depth.png
+depth_wallpaper.png
+temp_depth.png
+.vscode/
+.idea/
+build/
+dist/
+*.spec

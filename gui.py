@@ -41,10 +41,30 @@ PREMIUM_COLORS = [
     "#FF9933"  # Vibrant Orange
 ]
 
+# Curated high-contrast wallpapers optimized for 3D depth clocks
+CURATED_WALLPAPERS = {
+    "Curated Nature (Unsplash)": [
+        "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?auto=format&fit=crop&q=80&w=1920",
+        "https://images.unsplash.com/photo-1447752875215-b2761acb3c5d?auto=format&fit=crop&q=80&w=1920",
+        "https://images.unsplash.com/photo-1472214222541-d510753a8707?auto=format&fit=crop&q=80&w=1920",
+        "https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&q=80&w=1920",
+        "https://images.unsplash.com/photo-1501854140801-50d01698950b?auto=format&fit=crop&q=80&w=1920"
+    ],
+    "Curated Space & Stars": [
+        "https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&q=80&w=1920",
+        "https://images.unsplash.com/photo-1506318137071-a8e063b4bec0?auto=format&fit=crop&q=80&w=1920",
+        "https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?auto=format&fit=crop&q=80&w=1920",
+        "https://images.unsplash.com/photo-1538370965046-79c0d6907d47?auto=format&fit=crop&q=80&w=1920"
+    ],
+    "Curated Cities & Architecture": [
+        "https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?auto=format&fit=crop&q=80&w=1920",
+        "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&q=80&w=1920",
+        "https://images.unsplash.com/photo-1449034446853-66c86144b0ad?auto=format&fit=crop&q=80&w=1920",
+        "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&q=80&w=1920"
+    ]
+}
+
 def get_dominant_colors(image_path, num_colors=5):
-    """
-    Extracts the dominant colors from the wallpaper image using Pillow.
-    """
     try:
         img = Image.open(image_path).convert("RGB")
         img = img.resize((100, 100))
@@ -106,7 +126,7 @@ class DepthClockGUI(ctk.CTk):
         super().__init__()
         
         self.title("Windows Depth Clock - Settings")
-        self.geometry("1100x650")
+        self.geometry("1120x700")
         self.resizable(False, False)
         
         # Initialize default values
@@ -118,16 +138,15 @@ class DepthClockGUI(ctk.CTk):
         self.renderer_process = None
         self.suggested_buttons = []
         
-        # Fetch screen size (correctly DPI aware now)
+        # Fetch screen size
         self.screen_w = win32api.GetSystemMetrics(0)
         self.screen_h = win32api.GetSystemMetrics(1)
         
         # Calculate preview canvas dimensions to exactly match screen aspect ratio
         screen_aspect = self.screen_w / self.screen_h
-        self.preview_canvas_w = 600
+        self.preview_canvas_w = 620
         self.preview_canvas_h = int(self.preview_canvas_w / screen_aspect)
         
-        # Default config settings (using ratio coordinates for perfect scaling & alignment)
         self.config_data = {
             "wallpaper_path": "",
             "depth_map_path": "",
@@ -179,7 +198,6 @@ class DepthClockGUI(ctk.CTk):
             self.set_status("Engine ready.")
             self.enable_controls(True)
             
-            # If there was a pre-configured wallpaper, generate preview
             if self.wallpaper_path and os.path.exists(self.wallpaper_path):
                 self.process_wallpaper(self.wallpaper_path)
         except Exception as e:
@@ -195,9 +213,9 @@ class DepthClockGUI(ctk.CTk):
         val = "normal" if state else "disabled"
         self.select_wp_btn.configure(state=val)
         self.rand_wp_btn.configure(state=val)
-        self.rand_style_btn.configure(state=val)
         self.import_pkg_btn.configure(state=val)
         self.export_pkg_btn.configure(state=val)
+        self.rand_style_btn.configure(state=val)
         
     def is_startup_enabled(self):
         key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
@@ -217,7 +235,6 @@ class DepthClockGUI(ctk.CTk):
         key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
         script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "depth_clock.py"))
         
-        # Configure run command using pythonw (no console window popups)
         if sys.executable.endswith("python.exe"):
             pythonw_exe = sys.executable.lower().replace("python.exe", "pythonw.exe")
             cmd_str = f'"{pythonw_exe}" "{script_path}" --daemon'
@@ -240,7 +257,7 @@ class DepthClockGUI(ctk.CTk):
             print("Failed to update startup configuration registry:", e)
         
     def create_widgets(self):
-        # Left Panel (Controls) - now scrollable to fit any screen resolution/scaling elegantly
+        # Left Panel (Controls)
         left_panel = ctk.CTkScrollableFrame(self, width=420)
         left_panel.pack(side="left", fill="y", padx=15, pady=15)
         
@@ -248,7 +265,7 @@ class DepthClockGUI(ctk.CTk):
         title_label.pack(anchor="w", padx=15, pady=(15, 5))
         
         self.status_label = ctk.CTkLabel(left_panel, text="Initializing...", font=("Segoe UI", 12, "italic"), text_color="gray")
-        self.status_label.pack(anchor="w", padx=15, pady=(0, 15))
+        self.status_label.pack(anchor="w", padx=15, pady=(0, 10))
         
         # Wallpaper Action Buttons
         wp_btn_frame = ctk.CTkFrame(left_panel, fg_color="transparent")
@@ -260,19 +277,15 @@ class DepthClockGUI(ctk.CTk):
         self.rand_wp_btn = ctk.CTkButton(wp_btn_frame, text="Random Wallpaper", width=180, fg_color="#34495e", hover_color="#2c3e50", command=self.fetch_random_wallpaper, state="disabled")
         self.rand_wp_btn.pack(side="right")
         
-        # Package Import/Export Buttons (.depthpkg)
-        pkg_btn_frame = ctk.CTkFrame(left_panel, fg_color="transparent")
-        pkg_btn_frame.pack(fill="x", padx=15, pady=2)
+        # Wallpaper Source Selector
+        ctk.CTkLabel(left_panel, text="Random Wallpaper Source", font=("Segoe UI", 12, "bold")).pack(anchor="w", padx=15, pady=(5, 2))
+        self.wp_source_dropdown = ctk.CTkComboBox(left_panel, values=["Picsum Photos (Random)", "Curated Nature (Unsplash)", "Curated Space & Stars", "Curated Cities & Architecture"])
+        self.wp_source_dropdown.set("Picsum Photos (Random)")
+        self.wp_source_dropdown.pack(fill="x", padx=15, pady=2)
         
-        self.import_pkg_btn = ctk.CTkButton(pkg_btn_frame, text="Import Package", width=180, fg_color="#d35400", hover_color="#e67e22", command=self.import_depthpkg, state="disabled")
-        self.import_pkg_btn.pack(side="left", padx=(0, 10))
-        
-        self.export_pkg_btn = ctk.CTkButton(pkg_btn_frame, text="Export Package", width=180, fg_color="#2980b9", hover_color="#3498db", command=self.export_depthpkg, state="disabled")
-        self.export_pkg_btn.pack(side="right")
-        
-        # Tabview for different styling properties
+        # Tabview for styling properties
         tabview = ctk.CTkTabview(left_panel)
-        tabview.pack(fill="both", expand=True, padx=10, pady=10)
+        tabview.pack(fill="both", expand=True, padx=10, pady=5)
         
         depth_tab = tabview.add("Depth")
         clock_tab = tabview.add("Clock Style")
@@ -310,7 +323,7 @@ class DepthClockGUI(ctk.CTk):
         self.font_combobox.pack(fill="x", pady=5)
         
         ctk.CTkLabel(clock_tab, text="Font Size", font=("Segoe UI", 13, "bold")).pack(anchor="w", pady=(5, 5))
-        self.font_size_slider = ctk.CTkSlider(clock_tab, from_=10, to=1000, command=self.on_size_changed)
+        self.font_size_slider = ctk.CTkSlider(clock_tab, from_=10, to=500, command=self.on_size_changed)
         self.font_size_slider.set(self.config_data["font_size"])
         self.font_size_slider.pack(fill="x", pady=5)
         
@@ -335,7 +348,6 @@ class DepthClockGUI(ctk.CTk):
             )
             btn.pack(side="left", padx=3)
             
-        # Suggested Image Colors (populates dynamically)
         self.suggested_label = ctk.CTkLabel(clock_tab, text="Suggested Wallpaper Colors", font=("Segoe UI", 13, "bold"))
         self.suggested_label.pack(anchor="w", pady=(5, 2))
         self.suggested_color_frame = ctk.CTkFrame(clock_tab, fg_color="transparent")
@@ -387,23 +399,18 @@ class DepthClockGUI(ctk.CTk):
         self.date_y_offset_slider.set(self.config_data.get("date_y_offset_ratio", -0.074))
         self.date_y_offset_slider.pack(fill="x", pady=5)
         
-        # Style and Apply Action Buttons
-        action_btn_frame = ctk.CTkFrame(left_panel, fg_color="transparent")
-        action_btn_frame.pack(fill="x", padx=15, pady=(5, 15))
-        
-        self.rand_style_btn = ctk.CTkButton(action_btn_frame, text="Random Style", width=180, fg_color="#9b59b6", hover_color="#8e44ad", command=self.randomize_styles, state="disabled")
-        self.rand_style_btn.pack(side="left", padx=(0, 10))
-        
-        apply_btn = ctk.CTkButton(action_btn_frame, text="Apply to Desktop", width=180, font=("Segoe UI", 14, "bold"), fg_color="#2ecc71", hover_color="#27ae60", command=self.apply_to_desktop)
-        apply_btn.pack(side="right")
-        
-        # Right Panel (Preview)
+        # Right Panel (Preview & Action Hub)
         right_panel = ctk.CTkFrame(self)
         right_panel.pack(side="right", fill="both", expand=True, padx=15, pady=15)
         
         preview_title = ctk.CTkLabel(right_panel, text="3D Depth Preview", font=("Segoe UI", 16, "bold"))
-        preview_title.pack(anchor="w", padx=15, pady=15)
+        preview_title.pack(anchor="w", padx=15, pady=(15, 5))
         
+        # Drag to position instruction
+        drag_hint = ctk.CTkLabel(right_panel, text="💡 Tip: Click and drag anywhere on the screen below to position the clock!", font=("Segoe UI", 12, "italic"), text_color="#3498db")
+        drag_hint.pack(anchor="w", padx=15, pady=(0, 5))
+        
+        # Interactive Tkinter Canvas
         self.preview_canvas = tk.Canvas(
             right_panel, 
             width=self.preview_canvas_w, 
@@ -414,8 +421,60 @@ class DepthClockGUI(ctk.CTk):
         )
         self.preview_canvas.pack(padx=15, pady=5)
         
+        # Bind mouse drag actions to allow direct dragging of the clock positioning ratios
+        self.preview_canvas.bind("<Button-1>", self.on_canvas_click)
+        self.preview_canvas.bind("<B1-Motion>", self.on_canvas_drag)
+        
+        # Action Buttons frame placed right below the Canvas
+        action_btn_frame = ctk.CTkFrame(right_panel, fg_color="transparent")
+        action_btn_frame.pack(fill="x", padx=15, pady=10)
+        
+        self.import_pkg_btn = ctk.CTkButton(action_btn_frame, text="Import Pkg", width=130, fg_color="#d35400", hover_color="#e67e22", command=self.import_depthpkg, state="disabled")
+        self.import_pkg_btn.pack(side="left", padx=(0, 8))
+        
+        self.export_pkg_btn = ctk.CTkButton(action_btn_frame, text="Export Pkg", width=130, fg_color="#2980b9", hover_color="#3498db", command=self.export_depthpkg, state="disabled")
+        self.export_pkg_btn.pack(side="left", padx=(0, 8))
+        
+        self.rand_style_btn = ctk.CTkButton(action_btn_frame, text="Random Style", width=130, fg_color="#9b59b6", hover_color="#8e44ad", command=self.randomize_styles, state="disabled")
+        self.rand_style_btn.pack(side="left", padx=(0, 8))
+        
+        apply_btn = ctk.CTkButton(action_btn_frame, text="Apply to Desktop", width=180, font=("Segoe UI", 14, "bold"), fg_color="#2ecc71", hover_color="#27ae60", command=self.apply_to_desktop)
+        apply_btn.pack(side="right")
+        
         self.info_lbl = ctk.CTkLabel(right_panel, text="Choose a wallpaper to generate the 3D effect preview.", font=("Segoe UI", 12), text_color="gray")
-        self.info_lbl.pack(pady=20)
+        self.info_lbl.pack(pady=(5, 0))
+        
+        # Warning alignment tip
+        alignment_note = ctk.CTkLabel(right_panel, text="* Actual desktop alignment matches preview exactly via screen aspect ratios.", font=("Segoe UI", 11, "italic"), text_color="gray")
+        alignment_note.pack(pady=(0, 5))
+        
+    def on_canvas_click(self, event):
+        self.update_position_from_mouse(event)
+        
+    def on_canvas_drag(self, event):
+        self.update_position_from_mouse(event)
+        
+    def update_position_from_mouse(self, event):
+        if self.raw_wp_image is None:
+            return
+            
+        # Constrain drag boundaries to preview canvas size
+        x = max(0, min(event.x, self.preview_canvas_w))
+        y = max(0, min(event.y, self.preview_canvas_h))
+        
+        # Convert into ratio coordinates (aspect ratio immune)
+        rx = float(x / self.preview_canvas_w)
+        ry = float(y / self.preview_canvas_h)
+        
+        self.config_data["pos_x_ratio"] = rx
+        self.config_data["pos_y_ratio"] = ry
+        
+        # Sync to sliders
+        self.pos_x_slider.set(rx)
+        self.pos_y_slider.set(ry)
+        
+        self.save_config()
+        self.update_preview()
         
     def choose_wallpaper(self):
         file_path = filedialog.askopenfilename(
@@ -429,14 +488,19 @@ class DepthClockGUI(ctk.CTk):
             self.process_wallpaper(file_path)
             
     def fetch_random_wallpaper(self):
+        source_selection = self.wp_source_dropdown.get()
         self.set_status("Fetching random online wallpaper...")
         self.enable_controls(False)
-        self.info_lbl.configure(text="Downloading high resolution photo from Picsum...")
+        self.info_lbl.configure(text="Downloading high resolution photo...")
         
         def run_fetch():
             try:
-                sig = random.randint(1, 100000)
-                url = f"https://picsum.photos/{self.screen_w}/{self.screen_h}?random={sig}"
+                # Resolve Source URL
+                if source_selection in CURATED_WALLPAPERS:
+                    url = random.choice(CURATED_WALLPAPERS[source_selection])
+                else:
+                    sig = random.randint(1, 100000)
+                    url = f"https://picsum.photos/{self.screen_w}/{self.screen_h}?random={sig}"
                 
                 headers = {'User-Agent': 'Mozilla/5.0'}
                 req = urllib.request.Request(url, headers=headers)
@@ -469,7 +533,7 @@ class DepthClockGUI(ctk.CTk):
         self.font_combobox.set(font)
         self.config_data["font_family"] = font
         
-        size = random.randint(90, 200)
+        size = random.randint(90, 250)
         self.font_size_slider.set(size)
         self.font_size_val_lbl.configure(text=f"{size} px")
         self.config_data["font_size"] = size
@@ -496,7 +560,6 @@ class DepthClockGUI(ctk.CTk):
         self.transition_val_lbl.configure(text=f"Width: {trans}px")
         self.config_data["transition_width"] = trans
         
-        # Save and update preview
         self.save_config()
         self.update_preview()
         
@@ -527,7 +590,6 @@ class DepthClockGUI(ctk.CTk):
                 # Extract dominant colors
                 self.extracted_colors = get_dominant_colors(img_path, num_colors=5)
                 
-                # Run GUI update on main thread
                 self.after(0, self.on_processing_complete)
             except Exception as e:
                 self.after(0, lambda: self.info_lbl.configure(text=f"Error: {e}"))
@@ -584,7 +646,6 @@ class DepthClockGUI(ctk.CTk):
         
         # 2. Draw Clock & Date
         font_family = self.font_combobox.get()
-        # Scale down clock size for preview based on true resolution scaling
         scale_factor = self.preview_canvas_w / self.screen_w
         preview_font_size = max(10, int(self.config_data["font_size"] * scale_factor))
         
@@ -730,11 +791,9 @@ class DepthClockGUI(ctk.CTk):
         try:
             self.set_status("Exporting package...")
             with zipfile.ZipFile(file_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                # Add files with generic names in the zip
                 zipf.write(self.wallpaper_path, "wallpaper.png")
                 zipf.write(depth_map_path, "depth_map.png")
                 
-                # Create a clean config for the zip
                 clean_config = self.config_data.copy()
                 clean_config["wallpaper_path"] = "wallpaper.png"
                 clean_config["depth_map_path"] = "depth_map.png"
@@ -764,9 +823,16 @@ class DepthClockGUI(ctk.CTk):
                 zipf.extract("depth_map.png", APP_DIR)
                 config_content = zipf.read("config.json").decode("utf-8")
                 
+            # Rename the depth_map.png to wallpaper_depth.png to prevent misalignment or cached depth files
+            extracted_depth = os.path.join(APP_DIR, "depth_map.png")
+            if os.path.exists(extracted_depth):
+                if os.path.exists(target_depth_map):
+                    os.remove(target_depth_map)
+                os.rename(extracted_depth, target_depth_map)
+                
             imported_config = json.loads(config_content)
             
-            # Override paths to point to local absolute paths
+            # Override paths to local absolute paths
             imported_config["wallpaper_path"] = target_wallpaper
             imported_config["depth_map_path"] = target_depth_map
             

@@ -41,7 +41,7 @@ PREMIUM_COLORS = [
     "#FF9933"  # Vibrant Orange
 ]
 
-# Curated high-contrast wallpapers optimized for 3D depth clocks
+# Curated wallpapers optimized for 3D depth clocks
 CURATED_WALLPAPERS = {
     "Curated Nature (Unsplash)": [
         "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?auto=format&fit=crop&q=80&w=1920",
@@ -126,7 +126,7 @@ class DepthClockGUI(ctk.CTk):
         super().__init__()
         
         self.title("Windows Depth Clock - Settings")
-        self.geometry("1120x700")
+        self.geometry("1120x720")
         self.resizable(False, False)
         
         # Initialize default values
@@ -162,7 +162,9 @@ class DepthClockGUI(ctk.CTk):
             "show_date": True,
             "date_format": "%a, %b %d",
             "date_y_offset_ratio": -0.074,
-            "sync_lockscreen": False
+            "sync_lockscreen": False,
+            "auto_color": False,
+            "cutout_mode": "Gradient Depth (MiDaS)"
         }
         
         self.load_saved_config()
@@ -204,7 +206,7 @@ class DepthClockGUI(ctk.CTk):
             self.set_status(f"Error loading model: {e}")
             
     def update_download_progress(self, percent):
-        self.set_status(f"Downloading 3D Depth Model: {percent}%")
+        self.set_status(f"Downloading AI weights: {percent}%")
         
     def set_status(self, text):
         self.status_label.configure(text=text)
@@ -292,6 +294,11 @@ class DepthClockGUI(ctk.CTk):
         position_tab = tabview.add("Clock Pos")
         
         # --- DEPTH TAB ---
+        ctk.CTkLabel(depth_tab, text="Outline Cutout Mode", font=("Segoe UI", 13, "bold")).pack(anchor="w", pady=(5, 2))
+        self.cutout_mode_dropdown = ctk.CTkComboBox(depth_tab, values=["Gradient Depth (MiDaS)", "Salient Subject (U-2-Net)"], command=self.on_cutout_mode_changed)
+        self.cutout_mode_dropdown.set(self.config_data.get("cutout_mode", "Gradient Depth (MiDaS)"))
+        self.cutout_mode_dropdown.pack(fill="x", pady=5)
+        
         ctk.CTkLabel(depth_tab, text="Foreground Threshold", font=("Segoe UI", 13, "bold")).pack(anchor="w", pady=(10, 5))
         self.threshold_slider = ctk.CTkSlider(depth_tab, from_=0, to=255, command=self.on_threshold_changed)
         self.threshold_slider.set(self.config_data["threshold"])
@@ -391,7 +398,6 @@ class DepthClockGUI(ctk.CTk):
         )
         self.preview_canvas.pack(padx=15, pady=5)
         
-        # Bind mouse drag actions to allow direct dragging of the clock positioning ratios
         self.preview_canvas.bind("<Button-1>", self.on_canvas_click)
         self.preview_canvas.bind("<B1-Motion>", self.on_canvas_drag)
         
@@ -467,18 +473,15 @@ class DepthClockGUI(ctk.CTk):
         if self.raw_wp_image is None:
             return
             
-        # Constrain drag boundaries to preview canvas size
         x = max(0, min(event.x, self.preview_canvas_w))
         y = max(0, min(event.y, self.preview_canvas_h))
         
-        # Convert into ratio coordinates (aspect ratio immune)
         rx = float(x / self.preview_canvas_w)
         ry = float(y / self.preview_canvas_h)
         
         self.config_data["pos_x_ratio"] = rx
         self.config_data["pos_y_ratio"] = ry
         
-        # Sync to sliders
         self.pos_x_slider.set(rx)
         self.pos_y_slider.set(ry)
         
@@ -504,7 +507,6 @@ class DepthClockGUI(ctk.CTk):
         
         def run_fetch():
             try:
-                # Resolve Source URL
                 if source_selection in CURATED_WALLPAPERS:
                     url = random.choice(CURATED_WALLPAPERS[source_selection])
                 else:
@@ -573,36 +575,44 @@ class DepthClockGUI(ctk.CTk):
         self.update_preview()
         
     def process_wallpaper(self, img_path):
-        self.set_status("Analyzing depth maps...")
-        self.info_lbl.configure(text="Processing image depth structure...")
+        cutout_mode = self.config_data.get("cutout_mode", "Gradient Depth (MiDaS)")
+        self.set_status(f"Analyzing {cutout_mode}...")
+        self.info_lbl.configure(text=f"Processing AI mask for {cutout_mode}...")
+        self.enable_controls(False)
         
         def run_inference():
             try:
-                # Compute full resolution depth map
-                depth = self.engine.compute_depth(img_path)
-                
-                # Save full resolution depth map to local APP_DIR
+                if cutout_mode == "Salient Subject (U-2-Net)":
+                    u2net_path = os.path.join(APP_DIR, "u2net.onnx")
+                    if not os.path.exists(u2net_path):
+                        self.after(0, lambda: self.set_status("Downloading U-2-Net model (~176MB)..."))
+                        from depth_engine import download_u2net
+                        download_u2net(self.update_download_progress)
+                        
+                    self.after(0, lambda: self.set_status("Running U-2-Net subject detection..."))
+                    mask_data = self.engine.compute_subject_mask(img_path)
+                else:
+                    self.after(0, lambda: self.set_status("Running MiDaS depth engine..."))
+                    mask_data = self.engine.compute_depth(img_path)
+                    
                 full_depth_path = os.path.join(APP_DIR, "wallpaper_depth.png")
-                Image.fromarray(depth).save(full_depth_path)
+                Image.fromarray(mask_data).save(full_depth_path)
                 
                 self.config_data["depth_map_path"] = full_depth_path
                 self.save_config()
                 
-                # Load images
                 wp_raw = Image.open(img_path).convert("RGBA")
-                depth_raw = Image.fromarray(depth).convert("L")
+                mask_raw = Image.fromarray(mask_data).convert("L")
                 
-                # Use resize_to_fill to ensure identical aspect ratio scaling and cropping as the desktop
                 self.raw_wp_image = resize_to_fill(wp_raw, self.preview_canvas_w, self.preview_canvas_h)
-                self.raw_depth_image = resize_to_fill(depth_raw, self.preview_canvas_w, self.preview_canvas_h)
+                self.raw_depth_image = resize_to_fill(mask_raw, self.preview_canvas_w, self.preview_canvas_h)
                 
-                # Extract dominant colors
                 self.extracted_colors = get_dominant_colors(img_path, num_colors=5)
                 
                 self.after(0, self.on_processing_complete)
             except Exception as e:
                 self.after(0, lambda: self.info_lbl.configure(text=f"Error: {e}"))
-                self.after(0, lambda: self.set_status("Failed to generate depth map."))
+                self.after(0, lambda: self.set_status("Failed to generate cutout mask."))
                 self.after(0, lambda: self.enable_controls(True))
                 
         threading.Thread(target=run_inference, daemon=True).start()
@@ -630,7 +640,6 @@ class DepthClockGUI(ctk.CTk):
             
         self.suggested_label.pack(anchor="w", pady=(5, 2))
         
-        # Populate buttons
         for color_code in self.extracted_colors:
             btn = ctk.CTkButton(
                 self.suggested_color_frame, 
@@ -652,18 +661,15 @@ class DepthClockGUI(ctk.CTk):
         threshold = int(self.threshold_slider.get())
         blur_radius = int(self.blur_slider.get())
         
-        # 1. Background layer
         bg_photo = ImageTk.PhotoImage(self.raw_wp_image)
         self.preview_canvas.delete("all")
         self.preview_canvas.create_image(0, 0, anchor="nw", image=bg_photo)
-        self.bg_photo_ref = bg_photo # keep reference
+        self.bg_photo_ref = bg_photo
         
-        # 2. Draw Clock & Date
         font_family = self.font_combobox.get()
         scale_factor = self.preview_canvas_w / self.screen_w
         preview_font_size = max(10, int(self.config_data["font_size"] * scale_factor))
         
-        # Calculate preview coordinates using ratios (100% immune to DPI/Scaling shifts)
         preview_x = int(self.preview_canvas_w * self.config_data["pos_x_ratio"])
         preview_y = int(self.preview_canvas_h * self.config_data["pos_y_ratio"])
         
@@ -671,12 +677,10 @@ class DepthClockGUI(ctk.CTk):
         if time_str.startswith("0") and not self.config_data["format_24h"]:
             time_str = time_str[1:]
             
-        # Draw Date if enabled
         if self.config_data.get("show_date", True):
             date_str = time.strftime(self.config_data.get("date_format", "%a, %b %d"))
             preview_date_size = max(8, int(preview_font_size * 0.3))
             
-            # Apply scale factor to date Y offset ratio
             preview_date_offset = int(self.preview_canvas_h * self.config_data.get("date_y_offset_ratio", -0.074))
             date_y = preview_y + preview_date_offset
             
@@ -689,7 +693,6 @@ class DepthClockGUI(ctk.CTk):
                 anchor="center"
             )
             
-        # Draw Clock Time
         self.preview_canvas.create_text(
             preview_x, 
             preview_y, 
@@ -699,7 +702,6 @@ class DepthClockGUI(ctk.CTk):
             anchor="center"
         )
         
-        # 3. Masked Foreground layer with smoothstep anti-aliasing
         depth_np = np.array(self.raw_depth_image, dtype=np.float32)
         w = max(1, int(self.config_data.get("transition_width", 10)))
         t = (depth_np - (threshold - w)) / (2 * w)
@@ -716,7 +718,7 @@ class DepthClockGUI(ctk.CTk):
         
         fg_photo = ImageTk.PhotoImage(fg_img)
         self.preview_canvas.create_image(0, 0, anchor="nw", image=fg_photo)
-        self.fg_photo_ref = fg_photo # keep reference
+        self.fg_photo_ref = fg_photo
         
     def on_threshold_changed(self, value):
         self.config_data["threshold"] = int(value)
@@ -776,6 +778,12 @@ class DepthClockGUI(ctk.CTk):
             self.config_data["color"] = self.extracted_colors[0]
             self.save_config()
             self.update_preview()
+            
+    def on_cutout_mode_changed(self, value):
+        self.config_data["cutout_mode"] = value
+        self.save_config()
+        if self.wallpaper_path and os.path.exists(self.wallpaper_path):
+            self.process_wallpaper(self.wallpaper_path)
         
     def on_pos_x_changed(self, value):
         self.config_data["pos_x_ratio"] = float(value)
@@ -845,7 +853,6 @@ class DepthClockGUI(ctk.CTk):
                 zipf.extract("depth_map.png", APP_DIR)
                 config_content = zipf.read("config.json").decode("utf-8")
                 
-            # Rename the depth_map.png to wallpaper_depth.png to prevent misalignment or cached depth files
             extracted_depth = os.path.join(APP_DIR, "depth_map.png")
             if os.path.exists(extracted_depth):
                 if os.path.exists(target_depth_map):
@@ -854,7 +861,6 @@ class DepthClockGUI(ctk.CTk):
                 
             imported_config = json.loads(config_content)
             
-            # Override paths to local absolute paths
             imported_config["wallpaper_path"] = target_wallpaper
             imported_config["depth_map_path"] = target_depth_map
             
@@ -863,12 +869,10 @@ class DepthClockGUI(ctk.CTk):
             
             self.wallpaper_path = target_wallpaper
             
-            # Reload preview images
             self.raw_wp_image = resize_to_fill(Image.open(target_wallpaper).convert("RGBA"), self.preview_canvas_w, self.preview_canvas_h)
             self.raw_depth_image = resize_to_fill(Image.open(target_depth_map).convert("L"), self.preview_canvas_w, self.preview_canvas_h)
             self.extracted_colors = get_dominant_colors(target_wallpaper, num_colors=5)
             
-            # Update UI controls
             self.threshold_slider.set(self.config_data["threshold"])
             self.threshold_val_lbl.configure(text=f"Value: {self.config_data['threshold']}")
             
@@ -882,6 +886,8 @@ class DepthClockGUI(ctk.CTk):
             
             self.font_size_slider.set(self.config_data["font_size"])
             self.font_size_val_lbl.configure(text=f"{self.config_data['font_size']} px")
+            
+            self.cutout_mode_dropdown.set(self.config_data.get("cutout_mode", "Gradient Depth (MiDaS)"))
             
             if self.config_data["format_24h"]:
                 self.format_switch.select()
@@ -897,6 +903,11 @@ class DepthClockGUI(ctk.CTk):
                 self.sync_lockscreen_switch.select()
             else:
                 self.sync_lockscreen_switch.deselect()
+                
+            if self.config_data.get("auto_color", False):
+                self.auto_color_switch.select()
+            else:
+                self.auto_color_switch.deselect()
                 
             self.pos_x_slider.set(self.config_data["pos_x_ratio"])
             self.pos_y_slider.set(self.config_data["pos_y_ratio"])
@@ -914,14 +925,12 @@ class DepthClockGUI(ctk.CTk):
         
         import subprocess
         
-        # Kill existing wallpaper daemon if it was run from this instance
         if self.renderer_process:
             try:
                 self.renderer_process.terminate()
             except:
                 pass
                 
-        # Run wallpaper daemon process (using pythonw to hide console windows)
         try:
             if sys.executable.endswith("python.exe"):
                 pythonw_exe = sys.executable.lower().replace("python.exe", "pythonw.exe")

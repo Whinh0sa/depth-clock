@@ -373,17 +373,17 @@ class DepthClockGUI(ctk.CTk):
         
         # --- CLOCK POS TAB ---
         ctk.CTkLabel(position_tab, text="Horizontal Position (X)", font=("Segoe UI", 13, "bold")).pack(anchor="w", pady=(10, 5))
-        self.pos_x_slider = ctk.CTkSlider(position_tab, from_=0.0, to=1.0, command=self.on_pos_x_changed)
+        self.pos_x_slider = ctk.CTkSlider(position_tab, from_=-1.0, to=2.0, command=self.on_pos_x_changed)
         self.pos_x_slider.set(self.config_data["pos_x_ratio"])
         self.pos_x_slider.pack(fill="x", pady=5)
         
         ctk.CTkLabel(position_tab, text="Vertical Position (Y)", font=("Segoe UI", 13, "bold")).pack(anchor="w", pady=(10, 5))
-        self.pos_y_slider = ctk.CTkSlider(position_tab, from_=0.0, to=1.0, command=self.on_pos_y_changed)
+        self.pos_y_slider = ctk.CTkSlider(position_tab, from_=-1.0, to=2.0, command=self.on_pos_y_changed)
         self.pos_y_slider.set(self.config_data["pos_y_ratio"])
         self.pos_y_slider.pack(fill="x", pady=5)
         
         ctk.CTkLabel(position_tab, text="Date Vertical Offset (Y)", font=("Segoe UI", 13, "bold")).pack(anchor="w", pady=(10, 5))
-        self.date_y_offset_slider = ctk.CTkSlider(position_tab, from_=-0.2, to=0.2, command=self.on_date_y_offset_changed)
+        self.date_y_offset_slider = ctk.CTkSlider(position_tab, from_=-1.0, to=1.0, command=self.on_date_y_offset_changed)
         self.date_y_offset_slider.set(self.config_data.get("date_y_offset_ratio", -0.074))
         self.date_y_offset_slider.pack(fill="x", pady=5)
         

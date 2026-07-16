@@ -4,11 +4,11 @@ import numpy as np
 from PIL import Image
 
 MODEL_URL = "https://github.com/intel-isl/MiDaS/releases/download/v2_1/model-small.onnx"
-U2NET_URL = "https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2net.onnx"
+U2NET_URL = "https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2netp.onnx"
 
 APP_DIR = os.path.join(os.path.expanduser("~"), ".depthclock")
 MODEL_PATH = os.path.join(APP_DIR, "model-small.onnx")
-U2NET_PATH = os.path.join(APP_DIR, "u2net.onnx")
+U2NET_PATH = os.path.join(APP_DIR, "u2netp.onnx")
 
 def ensure_app_dir():
     if not os.path.exists(APP_DIR):
@@ -17,7 +17,7 @@ def ensure_app_dir():
 def download_model_file(url, target_path, name, progress_callback=None):
     ensure_app_dir()
     if os.path.exists(target_path):
-        if os.path.getsize(target_path) > 10 * 1024 * 1024: # Must be larger than 10MB
+        if os.path.getsize(target_path) > 1 * 1024 * 1024: # Must be larger than 1MB (U2Netp is 4.7MB)
             return True
             
     print(f"Downloading {name} ONNX model...")

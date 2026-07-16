@@ -583,9 +583,9 @@ class DepthClockGUI(ctk.CTk):
         def run_inference():
             try:
                 if cutout_mode == "Salient Subject (U-2-Net)":
-                    u2net_path = os.path.join(APP_DIR, "u2net.onnx")
+                    u2net_path = os.path.join(APP_DIR, "u2netp.onnx")
                     if not os.path.exists(u2net_path):
-                        self.after(0, lambda: self.set_status("Downloading U-2-Net model (~176MB)..."))
+                        self.after(0, lambda: self.set_status("Downloading U-2-Netp model (~4.7MB)..."))
                         from depth_engine import download_u2net
                         download_u2net(self.update_download_progress)
                         

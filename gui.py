@@ -14,6 +14,7 @@ import win32con
 import ctypes
 import winreg
 import sys
+import zipfile
 
 # Enable DPI Awareness to fix resolution and positioning issues on scaled displays
 try:
@@ -195,6 +196,8 @@ class DepthClockGUI(ctk.CTk):
         self.select_wp_btn.configure(state=val)
         self.rand_wp_btn.configure(state=val)
         self.rand_style_btn.configure(state=val)
+        self.import_pkg_btn.configure(state=val)
+        self.export_pkg_btn.configure(state=val)
         
     def is_startup_enabled(self):
         key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
@@ -249,13 +252,23 @@ class DepthClockGUI(ctk.CTk):
         
         # Wallpaper Action Buttons
         wp_btn_frame = ctk.CTkFrame(left_panel, fg_color="transparent")
-        wp_btn_frame.pack(fill="x", padx=15, pady=5)
+        wp_btn_frame.pack(fill="x", padx=15, pady=2)
         
         self.select_wp_btn = ctk.CTkButton(wp_btn_frame, text="Choose Wallpaper", width=180, command=self.choose_wallpaper, state="disabled")
         self.select_wp_btn.pack(side="left", padx=(0, 10))
         
         self.rand_wp_btn = ctk.CTkButton(wp_btn_frame, text="Random Wallpaper", width=180, fg_color="#34495e", hover_color="#2c3e50", command=self.fetch_random_wallpaper, state="disabled")
         self.rand_wp_btn.pack(side="right")
+        
+        # Package Import/Export Buttons (.depthpkg)
+        pkg_btn_frame = ctk.CTkFrame(left_panel, fg_color="transparent")
+        pkg_btn_frame.pack(fill="x", padx=15, pady=2)
+        
+        self.import_pkg_btn = ctk.CTkButton(pkg_btn_frame, text="Import Package", width=180, fg_color="#d35400", hover_color="#e67e22", command=self.import_depthpkg, state="disabled")
+        self.import_pkg_btn.pack(side="left", padx=(0, 10))
+        
+        self.export_pkg_btn = ctk.CTkButton(pkg_btn_frame, text="Export Package", width=180, fg_color="#2980b9", hover_color="#3498db", command=self.export_depthpkg, state="disabled")
+        self.export_pkg_btn.pack(side="right")
         
         # Tabview for different styling properties
         tabview = ctk.CTkTabview(left_panel)
@@ -344,7 +357,6 @@ class DepthClockGUI(ctk.CTk):
             self.date_switch.deselect()
         self.date_switch.pack(anchor="w", pady=2)
         
-        # New Lockscreen Sync Switch
         self.sync_lockscreen_switch = ctk.CTkSwitch(clock_tab, text="Sync to Lockscreen", command=self.on_sync_lockscreen_changed)
         if self.config_data.get("sync_lockscreen", False):
             self.sync_lockscreen_switch.select()
@@ -352,7 +364,6 @@ class DepthClockGUI(ctk.CTk):
             self.sync_lockscreen_switch.deselect()
         self.sync_lockscreen_switch.pack(anchor="w", pady=2)
         
-        # New Run at Startup Switch
         self.startup_switch = ctk.CTkSwitch(clock_tab, text="Run on Windows Startup", command=self.on_startup_changed)
         if self.is_startup_enabled():
             self.startup_switch.select()
@@ -573,6 +584,7 @@ class DepthClockGUI(ctk.CTk):
         
         # 2. Draw Clock & Date
         font_family = self.font_combobox.get()
+        # Scale down clock size for preview based on true resolution scaling
         scale_factor = self.preview_canvas_w / self.screen_w
         preview_font_size = max(10, int(self.config_data["font_size"] * scale_factor))
         
@@ -678,7 +690,6 @@ class DepthClockGUI(ctk.CTk):
     def on_sync_lockscreen_changed(self):
         self.config_data["sync_lockscreen"] = self.sync_lockscreen_switch.get()
         self.save_config()
-        # Preview doesn't change for lockscreen sync
         
     def on_startup_changed(self):
         self.set_startup(self.startup_switch.get())
@@ -698,6 +709,117 @@ class DepthClockGUI(ctk.CTk):
         self.save_config()
         self.update_preview()
         
+    def export_depthpkg(self):
+        if not self.wallpaper_path or not os.path.exists(self.wallpaper_path):
+            self.set_status("No wallpaper loaded to export.")
+            return
+            
+        depth_map_path = self.config_data.get("depth_map_path", "")
+        if not depth_map_path or not os.path.exists(depth_map_path):
+            self.set_status("No depth map generated to export.")
+            return
+            
+        file_path = filedialog.asksaveasfilename(
+            title="Export Depth Package",
+            defaultextension=".depthpkg",
+            filetypes=[("Depth Package", "*.depthpkg")]
+        )
+        if not file_path:
+            return
+            
+        try:
+            self.set_status("Exporting package...")
+            with zipfile.ZipFile(file_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                # Add files with generic names in the zip
+                zipf.write(self.wallpaper_path, "wallpaper.png")
+                zipf.write(depth_map_path, "depth_map.png")
+                
+                # Create a clean config for the zip
+                clean_config = self.config_data.copy()
+                clean_config["wallpaper_path"] = "wallpaper.png"
+                clean_config["depth_map_path"] = "depth_map.png"
+                
+                zipf.writestr("config.json", json.dumps(clean_config, indent=4))
+            self.set_status("Package exported successfully!")
+        except Exception as e:
+            self.set_status(f"Export failed: {e}")
+
+    def import_depthpkg(self):
+        file_path = filedialog.askopenfilename(
+            title="Import Depth Package",
+            filetypes=[("Depth Package", "*.depthpkg")]
+        )
+        if not file_path:
+            return
+            
+        try:
+            self.set_status("Importing package...")
+            os.makedirs(APP_DIR, exist_ok=True)
+            
+            target_wallpaper = os.path.join(APP_DIR, "wallpaper.png")
+            target_depth_map = os.path.join(APP_DIR, "wallpaper_depth.png")
+            
+            with zipfile.ZipFile(file_path, 'r') as zipf:
+                zipf.extract("wallpaper.png", APP_DIR)
+                zipf.extract("depth_map.png", APP_DIR)
+                config_content = zipf.read("config.json").decode("utf-8")
+                
+            imported_config = json.loads(config_content)
+            
+            # Override paths to point to local absolute paths
+            imported_config["wallpaper_path"] = target_wallpaper
+            imported_config["depth_map_path"] = target_depth_map
+            
+            self.config_data.update(imported_config)
+            self.save_config()
+            
+            self.wallpaper_path = target_wallpaper
+            
+            # Reload preview images
+            self.raw_wp_image = resize_to_fill(Image.open(target_wallpaper).convert("RGBA"), self.preview_canvas_w, self.preview_canvas_h)
+            self.raw_depth_image = resize_to_fill(Image.open(target_depth_map).convert("L"), self.preview_canvas_w, self.preview_canvas_h)
+            self.extracted_colors = get_dominant_colors(target_wallpaper, num_colors=5)
+            
+            # Update UI controls
+            self.threshold_slider.set(self.config_data["threshold"])
+            self.threshold_val_lbl.configure(text=f"Value: {self.config_data['threshold']}")
+            
+            self.blur_slider.set(self.config_data["blur_radius"])
+            self.blur_val_lbl.configure(text=f"Radius: {self.config_data['blur_radius']}px")
+            
+            self.transition_slider.set(self.config_data.get("transition_width", 10))
+            self.transition_val_lbl.configure(text=f"Width: {self.config_data.get('transition_width', 10)}px")
+            
+            self.font_combobox.set(self.config_data["font_family"])
+            
+            self.font_size_slider.set(self.config_data["font_size"])
+            self.font_size_val_lbl.configure(text=f"{self.config_data['font_size']} px")
+            
+            if self.config_data["format_24h"]:
+                self.format_switch.select()
+            else:
+                self.format_switch.deselect()
+                
+            if self.config_data.get("show_date", True):
+                self.date_switch.select()
+            else:
+                self.date_switch.deselect()
+                
+            if self.config_data.get("sync_lockscreen", False):
+                self.sync_lockscreen_switch.select()
+            else:
+                self.sync_lockscreen_switch.deselect()
+                
+            self.pos_x_slider.set(self.config_data["pos_x_ratio"])
+            self.pos_y_slider.set(self.config_data["pos_y_ratio"])
+            self.date_y_offset_slider.set(self.config_data.get("date_y_offset_ratio", -0.074))
+            
+            self.update_suggested_colors()
+            self.update_preview()
+            self.set_status("Package imported successfully!")
+        except Exception as e:
+            self.set_status(f"Import failed: {e}")
+            
     def apply_to_desktop(self):
         self.save_config()
         self.set_status("Applying settings to desktop wallpaper...")
@@ -713,7 +835,6 @@ class DepthClockGUI(ctk.CTk):
                 
         # Run wallpaper daemon process (using pythonw to hide console windows)
         try:
-            # Check if running python.exe to run pythonw.exe
             if sys.executable.endswith("python.exe"):
                 pythonw_exe = sys.executable.lower().replace("python.exe", "pythonw.exe")
             else:

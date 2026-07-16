@@ -7,7 +7,7 @@ import urllib.request
 import numpy as np
 import tkinter as tk
 from tkinter import filedialog
-from PIL import Image, ImageTk, ImageFilter
+from PIL import Image, ImageTk, ImageFilter, ImageDraw, ImageFont
 import customtkinter as ctk
 import win32api
 import win32con
@@ -15,6 +15,8 @@ import ctypes
 import winreg
 import sys
 import zipfile
+import shutil
+import hashlib
 
 # Enable DPI Awareness to fix resolution and positioning issues on scaled displays
 try:
@@ -29,6 +31,8 @@ from depth_engine import DepthEngine, download_model, APP_DIR, MODEL_PATH
 
 CONFIG_PATH = os.path.join(APP_DIR, "config.json")
 RANDOM_WP_PATH = os.path.join(APP_DIR, "random_wallpaper.jpg")
+GALLERY_DIR = os.path.join(APP_DIR, "gallery")
+GALLERY_DEPTH_DIR = os.path.join(APP_DIR, "gallery_depths")
 
 PREMIUM_COLORS = [
     "#FFFFFF", # White
@@ -63,6 +67,13 @@ CURATED_WALLPAPERS = {
         "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&q=80&w=1920"
     ]
 }
+
+def get_file_hash(filepath):
+    try:
+        with open(filepath, 'rb') as f:
+            return hashlib.md5(f.read()).hexdigest()
+    except:
+        return str(int(time.time()))
 
 def get_dominant_colors(image_path, num_colors=5):
     try:
@@ -129,6 +140,10 @@ class DepthClockGUI(ctk.CTk):
         self.geometry("1120x720")
         self.resizable(False, False)
         
+        # Ensure gallery subfolders exist
+        os.makedirs(GALLERY_DIR, exist_ok=True)
+        os.makedirs(GALLERY_DEPTH_DIR, exist_ok=True)
+        
         # Initialize default values
         self.wallpaper_path = ""
         self.depth_map = None
@@ -137,6 +152,7 @@ class DepthClockGUI(ctk.CTk):
         self.engine = None
         self.renderer_process = None
         self.suggested_buttons = []
+        self.gallery_buttons = []
         
         # Fetch screen size
         self.screen_w = win32api.GetSystemMetrics(0)
@@ -293,6 +309,10 @@ class DepthClockGUI(ctk.CTk):
         depth_tab = tabview.add("Depth")
         clock_tab = tabview.add("Clock Style")
         position_tab = tabview.add("Clock Pos")
+        self.gallery_tab = tabview.add("Gallery")
+        
+        # Configure Tabview callbacks to refresh gallery when opened
+        tabview.configure(command=self.on_tab_changed)
         
         # --- DEPTH TAB ---
         ctk.CTkLabel(depth_tab, text="Outline Cutout Mode", font=("Segoe UI", 13, "bold")).pack(anchor="w", pady=(5, 2))
@@ -376,6 +396,15 @@ class DepthClockGUI(ctk.CTk):
         self.date_y_offset_slider = ctk.CTkSlider(position_tab, from_=-1.0, to=1.0, command=self.on_date_y_offset_changed)
         self.date_y_offset_slider.set(self.config_data.get("date_y_offset_ratio", -0.074))
         self.date_y_offset_slider.pack(fill="x", pady=5)
+        
+        # --- GALLERY TAB ---
+        ctk.CTkLabel(self.gallery_tab, text="Wallpaper History", font=("Segoe UI", 14, "bold")).pack(anchor="w", pady=(5, 5))
+        self.gallery_hint = ctk.CTkLabel(self.gallery_tab, text="Click a thumbnail to load a past design instantly (no wait):", font=("Segoe UI", 11, "italic"), text_color="gray")
+        self.gallery_hint.pack(anchor="w", pady=(0, 5))
+        
+        # Sub-container frame inside the scrollable left panel gallery tab
+        self.gallery_grid_frame = ctk.CTkFrame(self.gallery_tab, fg_color="transparent")
+        self.gallery_grid_frame.pack(fill="both", expand=True, pady=5)
         
         # Right Panel (Preview & Action Hub)
         right_panel = ctk.CTkFrame(self)
@@ -467,6 +496,83 @@ class DepthClockGUI(ctk.CTk):
         alignment_note = ctk.CTkLabel(right_panel, text="* Actual desktop alignment matches preview exactly via screen aspect ratios.", font=("Segoe UI", 11, "italic"), text_color="gray")
         alignment_note.pack(pady=(0, 5))
         
+    def on_tab_changed(self, tab_name=None):
+        if tab_name == "Gallery" or (hasattr(self, 'tabview') and self.tabview.get() == "Gallery"):
+            self.load_gallery_thumbnails()
+            
+    def load_gallery_thumbnails(self):
+        # Clear previous widgets
+        for btn in self.gallery_buttons:
+            btn.destroy()
+        self.gallery_buttons.clear()
+        
+        files = [f for f in os.listdir(GALLERY_DIR) if f.endswith(".png")]
+        if not files:
+            lbl = ctk.CTkLabel(self.gallery_grid_frame, text="No wallpapers in history yet.", font=("Segoe UI", 12, "italic"), text_color="gray")
+            lbl.pack(pady=20)
+            self.gallery_buttons.append(lbl)
+            return
+            
+        # Display in a nice grid of 3 columns
+        col = 0
+        row = 0
+        for f in files:
+            hash_id = f.replace(".png", "")
+            img_path = os.path.join(GALLERY_DIR, f)
+            
+            try:
+                # Open image and create thumbnail
+                full_img = Image.open(img_path)
+                full_img.thumbnail((90, 60))
+                thumb_img = ImageTk.PhotoImage(full_img)
+                
+                btn = ctk.CTkButton(
+                    self.gallery_grid_frame,
+                    image=thumb_img,
+                    text="",
+                    width=90,
+                    height=60,
+                    fg_color="transparent",
+                    hover_color="#34495e",
+                    command=lambda hid=hash_id: self.load_from_gallery(hid)
+                )
+                btn.image = thumb_img # keep reference
+                btn.grid(row=row, column=col, padx=5, pady=5)
+                self.gallery_buttons.append(btn)
+                
+                col += 1
+                if col >= 3:
+                    col = 0
+                    row += 1
+            except Exception as e:
+                print(f"Error loading gallery thumbnail {f}: {e}")
+
+    def load_from_gallery(self, hash_id):
+        self.set_status("Loading wallpaper from gallery...")
+        wp_path = os.path.join(GALLERY_DIR, f"{hash_id}.png")
+        depth_path = os.path.join(GALLERY_DEPTH_DIR, f"{hash_id}.png")
+        
+        if not os.path.exists(wp_path) or not os.path.exists(depth_path):
+            self.set_status("Gallery files missing.")
+            return
+            
+        self.wallpaper_path = wp_path
+        self.config_data["wallpaper_path"] = wp_path
+        self.config_data["depth_map_path"] = depth_path
+        self.save_config()
+        
+        try:
+            wp_raw = Image.open(wp_path).convert("RGBA")
+            depth_raw = Image.open(depth_path).convert("L")
+            
+            self.raw_wp_image = resize_to_fill(wp_raw, self.preview_canvas_w, self.preview_canvas_h)
+            self.raw_depth_image = resize_to_fill(depth_raw, self.preview_canvas_w, self.preview_canvas_h)
+            
+            self.extracted_colors = get_dominant_colors(wp_path, num_colors=5)
+            self.on_processing_complete()
+        except Exception as e:
+            self.set_status(f"Failed to load from gallery: {e}")
+
     def on_canvas_click(self, event):
         self.update_position_from_mouse(event)
         
@@ -534,7 +640,7 @@ class DepthClockGUI(ctk.CTk):
                 self.after(0, lambda: self.set_status("Failed to fetch wallpaper."))
                 self.after(0, lambda: self.enable_controls(True))
                 
-        threading.Thread(target=run_fetch, daemon=True).start()
+        threading.Thread(run_fetch, daemon=True).start()
         
     def randomize_styles(self):
         color_pool = PREMIUM_COLORS
@@ -604,6 +710,15 @@ class DepthClockGUI(ctk.CTk):
                 
                 self.config_data["depth_map_path"] = full_depth_path
                 self.save_config()
+                
+                # Copy wallpaper and depth to local gallery folder for historical caching
+                h = get_file_hash(img_path)
+                cached_wp = os.path.join(GALLERY_DIR, f"{h}.png")
+                cached_depth = os.path.join(GALLERY_DEPTH_DIR, f"{h}.png")
+                if not os.path.exists(cached_wp):
+                    shutil.copy(img_path, cached_wp)
+                if not os.path.exists(cached_depth):
+                    shutil.copy(full_depth_path, cached_depth)
                 
                 wp_raw = Image.open(img_path).convert("RGBA")
                 mask_raw = Image.fromarray(mask_data).convert("L")
@@ -917,6 +1032,15 @@ class DepthClockGUI(ctk.CTk):
             self.pos_y_slider.set(self.config_data["pos_y_ratio"])
             self.date_y_offset_slider.set(self.config_data.get("date_y_offset_ratio", -0.074))
             
+            # Copy imported package items directly to history gallery
+            h = get_file_hash(target_wallpaper)
+            cached_wp = os.path.join(GALLERY_DIR, f"{h}.png")
+            cached_depth = os.path.join(GALLERY_DEPTH_DIR, f"{h}.png")
+            if not os.path.exists(cached_wp):
+                shutil.copy(target_wallpaper, cached_wp)
+            if not os.path.exists(cached_depth):
+                shutil.copy(target_depth_map, cached_depth)
+            
             self.update_suggested_colors()
             self.update_preview()
             self.set_status("Package imported successfully!")
@@ -924,7 +1048,6 @@ class DepthClockGUI(ctk.CTk):
             self.set_status(f"Import failed: {e}")
             
     def save_standalone_wallpaper(self):
-        from PIL import ImageDraw, ImageFont
         if not self.wallpaper_path or not os.path.exists(self.wallpaper_path):
             self.set_status("No wallpaper loaded to save.")
             return
@@ -943,51 +1066,12 @@ class DepthClockGUI(ctk.CTk):
             threshold = int(self.threshold_slider.get())
             blur_radius = int(self.blur_slider.get())
             transition_width = int(self.transition_slider.get())
-            font_family = self.font_combobox.get()
-            font_size = self.config_data["font_size"]
-            color = self.config_data["color"]
-            format_24h = self.config_data["format_24h"]
-            show_date = self.config_data.get("show_date", True)
             depth_map_path = self.config_data.get("depth_map_path", "")
             
             wp_raw = Image.open(self.wallpaper_path).convert("RGBA")
             wp_img = resize_to_fill(wp_raw, self.screen_w, self.screen_h)
             
-            bg_with_clock = wp_img.copy()
-            draw = ImageDraw.Draw(bg_with_clock)
-            
-            pos_x = int(self.screen_w * self.config_data["pos_x_ratio"])
-            pos_y = int(self.screen_h * self.config_data["pos_y_ratio"])
-            
-            try:
-                font_path = os.path.join(os.environ.get("WINDIR", "C:\\Windows"), "Fonts", f"{font_family.lower()}.ttf")
-                if not os.path.exists(font_path):
-                    font_path = os.path.join(os.environ.get("WINDIR", "C:\\Windows"), "Fonts", "arialbd.ttf")
-                font = ImageFont.truetype(font_path, font_size)
-            except:
-                font = ImageFont.load_default()
-                
-            if show_date:
-                date_str = time.strftime(self.config_data.get("date_format", "%a, %b %d"))
-                date_font_size = max(12, int(font_size * 0.3))
-                try:
-                    date_font_path = os.path.join(os.environ.get("WINDIR", "C:\\Windows"), "Fonts", f"{font_family.lower()}.ttf")
-                    if not os.path.exists(date_font_path):
-                        date_font_path = os.path.join(os.environ.get("WINDIR", "C:\\Windows"), "Fonts", "arialbd.ttf")
-                    date_font = ImageFont.truetype(date_font_path, date_font_size)
-                except:
-                    date_font = ImageFont.load_default()
-                    
-                date_y_offset = int(self.screen_h * self.config_data.get("date_y_offset_ratio", -0.074))
-                draw.text((pos_x, pos_y + date_y_offset), date_str, font=date_font, fill=color, anchor="mm")
-                
-            time_format = "%H:%M" if format_24h else "%I:%M %p"
-            time_str = time.strftime(time_format)
-            if time_str.startswith("0") and not format_24h:
-                time_str = time_str[1:]
-                
-            draw.text((pos_x, pos_y), time_str, font=font, fill=color, anchor="mm")
-            
+            # COMPOSITING WITHOUT THE CLOCK AND DATE TEXT LAYERS
             if os.path.exists(depth_map_path):
                 depth_raw = Image.open(depth_map_path).convert("L")
                 depth_img = resize_to_fill(depth_raw, self.screen_w, self.screen_h)
@@ -1002,10 +1086,10 @@ class DepthClockGUI(ctk.CTk):
                 if blur_radius > 0:
                     mask = mask.filter(ImageFilter.GaussianBlur(blur_radius))
                     
-                final_image = bg_with_clock.copy()
+                final_image = wp_img.copy()
                 final_image.paste(wp_img, (0, 0), mask)
             else:
-                final_image = bg_with_clock
+                final_image = wp_img
                 
             if file_path.lower().endswith(".jpg") or file_path.lower().endswith(".jpeg"):
                 final_image.convert("RGB").save(file_path, "JPEG", quality=95)

@@ -353,44 +353,6 @@ class DepthClockGUI(ctk.CTk):
         self.suggested_color_frame = ctk.CTkFrame(clock_tab, fg_color="transparent")
         self.suggested_color_frame.pack(fill="x", pady=2)
         
-        ctk.CTkLabel(clock_tab, text="System & Time Options", font=("Segoe UI", 13, "bold")).pack(anchor="w", pady=(5, 5))
-        
-        self.format_switch = ctk.CTkSwitch(clock_tab, text="24-Hour Format", command=self.on_format_changed)
-        if self.config_data["format_24h"]:
-            self.format_switch.select()
-        else:
-            self.format_switch.deselect()
-        self.format_switch.pack(anchor="w", pady=2)
-        
-        self.date_switch = ctk.CTkSwitch(clock_tab, text="Show Date", command=self.on_date_changed)
-        if self.config_data.get("show_date", True):
-            self.date_switch.select()
-        else:
-            self.date_switch.deselect()
-        self.date_switch.pack(anchor="w", pady=2)
-        
-        self.sync_lockscreen_switch = ctk.CTkSwitch(clock_tab, text="Sync to Lockscreen", command=self.on_sync_lockscreen_changed)
-        if self.config_data.get("sync_lockscreen", False):
-            self.sync_lockscreen_switch.select()
-        else:
-            self.sync_lockscreen_switch.deselect()
-        self.sync_lockscreen_switch.pack(anchor="w", pady=2)
-        
-        self.startup_switch = ctk.CTkSwitch(clock_tab, text="Run on Windows Startup", command=self.on_startup_changed)
-        if self.is_startup_enabled():
-            self.startup_switch.select()
-        else:
-            self.startup_switch.deselect()
-        self.startup_switch.pack(anchor="w", pady=2)
-        
-        # New Auto Color Matching Switch
-        self.auto_color_switch = ctk.CTkSwitch(clock_tab, text="Auto Color Matching", command=self.on_auto_color_changed)
-        if self.config_data.get("auto_color", False):
-            self.auto_color_switch.select()
-        else:
-            self.auto_color_switch.deselect()
-        self.auto_color_switch.pack(anchor="w", pady=2)
-        
         # --- CLOCK POS TAB ---
         ctk.CTkLabel(position_tab, text="Horizontal Position (X)", font=("Segoe UI", 13, "bold")).pack(anchor="w", pady=(10, 5))
         self.pos_x_slider = ctk.CTkSlider(position_tab, from_=-1.0, to=2.0, command=self.on_pos_x_changed)
@@ -433,7 +395,46 @@ class DepthClockGUI(ctk.CTk):
         self.preview_canvas.bind("<Button-1>", self.on_canvas_click)
         self.preview_canvas.bind("<B1-Motion>", self.on_canvas_drag)
         
-        # Action Buttons frame placed right below the Canvas
+        # System & Time Options Grid (below canvas)
+        sys_options_frame = ctk.CTkFrame(right_panel, fg_color="transparent")
+        sys_options_frame.pack(fill="x", padx=15, pady=5)
+        
+        self.format_switch = ctk.CTkSwitch(sys_options_frame, text="24-Hour Format", command=self.on_format_changed)
+        if self.config_data["format_24h"]:
+            self.format_switch.select()
+        else:
+            self.format_switch.deselect()
+        self.format_switch.grid(row=0, column=0, sticky="w", padx=10, pady=4)
+        
+        self.date_switch = ctk.CTkSwitch(sys_options_frame, text="Show Date", command=self.on_date_changed)
+        if self.config_data.get("show_date", True):
+            self.date_switch.select()
+        else:
+            self.date_switch.deselect()
+        self.date_switch.grid(row=0, column=1, sticky="w", padx=10, pady=4)
+        
+        self.auto_color_switch = ctk.CTkSwitch(sys_options_frame, text="Auto Color Matching", command=self.on_auto_color_changed)
+        if self.config_data.get("auto_color", False):
+            self.auto_color_switch.select()
+        else:
+            self.auto_color_switch.deselect()
+        self.auto_color_switch.grid(row=0, column=2, sticky="w", padx=10, pady=4)
+        
+        self.sync_lockscreen_switch = ctk.CTkSwitch(sys_options_frame, text="Sync to Lockscreen", command=self.on_sync_lockscreen_changed)
+        if self.config_data.get("sync_lockscreen", False):
+            self.sync_lockscreen_switch.select()
+        else:
+            self.sync_lockscreen_switch.deselect()
+        self.sync_lockscreen_switch.grid(row=1, column=0, sticky="w", padx=10, pady=4)
+        
+        self.startup_switch = ctk.CTkSwitch(sys_options_frame, text="Run on Windows Startup", command=self.on_startup_changed)
+        if self.is_startup_enabled():
+            self.startup_switch.select()
+        else:
+            self.startup_switch.deselect()
+        self.startup_switch.grid(row=1, column=1, sticky="w", padx=10, pady=4)
+        
+        # Action Buttons frame placed right below the System Options
         action_btn_frame = ctk.CTkFrame(right_panel, fg_color="transparent")
         action_btn_frame.pack(fill="x", padx=15, pady=10)
         

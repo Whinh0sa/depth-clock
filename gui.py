@@ -310,7 +310,7 @@ class DepthClockGUI(ctk.CTk):
         self.font_combobox.pack(fill="x", pady=5)
         
         ctk.CTkLabel(clock_tab, text="Font Size", font=("Segoe UI", 13, "bold")).pack(anchor="w", pady=(5, 5))
-        self.font_size_slider = ctk.CTkSlider(clock_tab, from_=30, to=300, command=self.on_size_changed)
+        self.font_size_slider = ctk.CTkSlider(clock_tab, from_=10, to=1000, command=self.on_size_changed)
         self.font_size_slider.set(self.config_data["font_size"])
         self.font_size_slider.pack(fill="x", pady=5)
         

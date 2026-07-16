@@ -383,6 +383,14 @@ class DepthClockGUI(ctk.CTk):
             self.startup_switch.deselect()
         self.startup_switch.pack(anchor="w", pady=2)
         
+        # New Auto Color Matching Switch
+        self.auto_color_switch = ctk.CTkSwitch(clock_tab, text="Auto Color Matching", command=self.on_auto_color_changed)
+        if self.config_data.get("auto_color", False):
+            self.auto_color_switch.select()
+        else:
+            self.auto_color_switch.deselect()
+        self.auto_color_switch.pack(anchor="w", pady=2)
+        
         # --- CLOCK POS TAB ---
         ctk.CTkLabel(position_tab, text="Horizontal Position (X)", font=("Segoe UI", 13, "bold")).pack(anchor="w", pady=(10, 5))
         self.pos_x_slider = ctk.CTkSlider(position_tab, from_=-1.0, to=2.0, command=self.on_pos_x_changed)
@@ -602,6 +610,11 @@ class DepthClockGUI(ctk.CTk):
         self.set_status("Ready.")
         self.enable_controls(True)
         self.info_lbl.configure(text="Use depth slider to adjust layers. Click Apply to save.")
+        
+        if self.config_data.get("auto_color", False) and hasattr(self, 'extracted_colors') and self.extracted_colors:
+            self.config_data["color"] = self.extracted_colors[0]
+            self.save_config()
+            
         self.update_suggested_colors()
         self.update_preview()
         
@@ -754,6 +767,14 @@ class DepthClockGUI(ctk.CTk):
         
     def on_startup_changed(self):
         self.set_startup(self.startup_switch.get())
+        
+    def on_auto_color_changed(self):
+        self.config_data["auto_color"] = self.auto_color_switch.get()
+        self.save_config()
+        if self.config_data["auto_color"] and hasattr(self, 'extracted_colors') and self.extracted_colors:
+            self.config_data["color"] = self.extracted_colors[0]
+            self.save_config()
+            self.update_preview()
         
     def on_pos_x_changed(self, value):
         self.config_data["pos_x_ratio"] = float(value)

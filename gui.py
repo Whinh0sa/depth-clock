@@ -218,6 +218,7 @@ class DepthClockGUI(ctk.CTk):
         self.import_pkg_btn.configure(state=val)
         self.export_pkg_btn.configure(state=val)
         self.rand_style_btn.configure(state=val)
+        self.save_img_btn.configure(state=val)
         
     def is_startup_enabled(self):
         key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
@@ -444,16 +445,19 @@ class DepthClockGUI(ctk.CTk):
         action_btn_frame = ctk.CTkFrame(right_panel, fg_color="transparent")
         action_btn_frame.pack(fill="x", padx=15, pady=10)
         
-        self.import_pkg_btn = ctk.CTkButton(action_btn_frame, text="Import Pkg", width=130, fg_color="#d35400", hover_color="#e67e22", command=self.import_depthpkg, state="disabled")
-        self.import_pkg_btn.pack(side="left", padx=(0, 8))
+        self.import_pkg_btn = ctk.CTkButton(action_btn_frame, text="Import Pkg", width=110, fg_color="#d35400", hover_color="#e67e22", command=self.import_depthpkg, state="disabled")
+        self.import_pkg_btn.pack(side="left", padx=(0, 6))
         
-        self.export_pkg_btn = ctk.CTkButton(action_btn_frame, text="Export Pkg", width=130, fg_color="#2980b9", hover_color="#3498db", command=self.export_depthpkg, state="disabled")
-        self.export_pkg_btn.pack(side="left", padx=(0, 8))
+        self.export_pkg_btn = ctk.CTkButton(action_btn_frame, text="Export Pkg", width=110, fg_color="#2980b9", hover_color="#3498db", command=self.export_depthpkg, state="disabled")
+        self.export_pkg_btn.pack(side="left", padx=(0, 6))
         
-        self.rand_style_btn = ctk.CTkButton(action_btn_frame, text="Random Style", width=130, fg_color="#9b59b6", hover_color="#8e44ad", command=self.randomize_styles, state="disabled")
-        self.rand_style_btn.pack(side="left", padx=(0, 8))
+        self.rand_style_btn = ctk.CTkButton(action_btn_frame, text="Random Style", width=110, fg_color="#9b59b6", hover_color="#8e44ad", command=self.randomize_styles, state="disabled")
+        self.rand_style_btn.pack(side="left", padx=(0, 6))
         
-        apply_btn = ctk.CTkButton(action_btn_frame, text="Apply to Desktop", width=180, font=("Segoe UI", 14, "bold"), fg_color="#2ecc71", hover_color="#27ae60", command=self.apply_to_desktop)
+        self.save_img_btn = ctk.CTkButton(action_btn_frame, text="Save Image", width=110, fg_color="#e67e22", hover_color="#d35400", command=self.save_standalone_wallpaper, state="disabled")
+        self.save_img_btn.pack(side="left", padx=(0, 6))
+        
+        apply_btn = ctk.CTkButton(action_btn_frame, text="Apply Wallpaper", width=140, font=("Segoe UI", 13, "bold"), fg_color="#2ecc71", hover_color="#27ae60", command=self.apply_to_desktop)
         apply_btn.pack(side="right")
         
         self.info_lbl = ctk.CTkLabel(right_panel, text="Choose a wallpaper to generate the 3D effect preview.", font=("Segoe UI", 12), text_color="gray")
@@ -918,6 +922,99 @@ class DepthClockGUI(ctk.CTk):
             self.set_status("Package imported successfully!")
         except Exception as e:
             self.set_status(f"Import failed: {e}")
+            
+    def save_standalone_wallpaper(self):
+        from PIL import ImageDraw, ImageFont
+        if not self.wallpaper_path or not os.path.exists(self.wallpaper_path):
+            self.set_status("No wallpaper loaded to save.")
+            return
+            
+        file_path = filedialog.asksaveasfilename(
+            title="Save Wallpaper Image",
+            defaultextension=".png",
+            filetypes=[("PNG Image", "*.png"), ("JPEG Image", "*.jpg")]
+        )
+        if not file_path:
+            return
+            
+        try:
+            self.set_status("Rendering and saving wallpaper...")
+            
+            threshold = int(self.threshold_slider.get())
+            blur_radius = int(self.blur_slider.get())
+            transition_width = int(self.transition_slider.get())
+            font_family = self.font_combobox.get()
+            font_size = self.config_data["font_size"]
+            color = self.config_data["color"]
+            format_24h = self.config_data["format_24h"]
+            show_date = self.config_data.get("show_date", True)
+            depth_map_path = self.config_data.get("depth_map_path", "")
+            
+            wp_raw = Image.open(self.wallpaper_path).convert("RGBA")
+            wp_img = resize_to_fill(wp_raw, self.screen_w, self.screen_h)
+            
+            bg_with_clock = wp_img.copy()
+            draw = ImageDraw.Draw(bg_with_clock)
+            
+            pos_x = int(self.screen_w * self.config_data["pos_x_ratio"])
+            pos_y = int(self.screen_h * self.config_data["pos_y_ratio"])
+            
+            try:
+                font_path = os.path.join(os.environ.get("WINDIR", "C:\\Windows"), "Fonts", f"{font_family.lower()}.ttf")
+                if not os.path.exists(font_path):
+                    font_path = os.path.join(os.environ.get("WINDIR", "C:\\Windows"), "Fonts", "arialbd.ttf")
+                font = ImageFont.truetype(font_path, font_size)
+            except:
+                font = ImageFont.load_default()
+                
+            if show_date:
+                date_str = time.strftime(self.config_data.get("date_format", "%a, %b %d"))
+                date_font_size = max(12, int(font_size * 0.3))
+                try:
+                    date_font_path = os.path.join(os.environ.get("WINDIR", "C:\\Windows"), "Fonts", f"{font_family.lower()}.ttf")
+                    if not os.path.exists(date_font_path):
+                        date_font_path = os.path.join(os.environ.get("WINDIR", "C:\\Windows"), "Fonts", "arialbd.ttf")
+                    date_font = ImageFont.truetype(date_font_path, date_font_size)
+                except:
+                    date_font = ImageFont.load_default()
+                    
+                date_y_offset = int(self.screen_h * self.config_data.get("date_y_offset_ratio", -0.074))
+                draw.text((pos_x, pos_y + date_y_offset), date_str, font=date_font, fill=color, anchor="mm")
+                
+            time_format = "%H:%M" if format_24h else "%I:%M %p"
+            time_str = time.strftime(time_format)
+            if time_str.startswith("0") and not format_24h:
+                time_str = time_str[1:]
+                
+            draw.text((pos_x, pos_y), time_str, font=font, fill=color, anchor="mm")
+            
+            if os.path.exists(depth_map_path):
+                depth_raw = Image.open(depth_map_path).convert("L")
+                depth_img = resize_to_fill(depth_raw, self.screen_w, self.screen_h)
+                
+                depth_np = np.array(depth_img, dtype=np.float32)
+                t = (depth_np - (threshold - transition_width)) / (2 * transition_width)
+                t = np.clip(t, 0.0, 1.0)
+                
+                alpha_np = (255 * (3 * t**2 - 2 * t**3)).astype(np.uint8)
+                mask = Image.fromarray(alpha_np)
+                
+                if blur_radius > 0:
+                    mask = mask.filter(ImageFilter.GaussianBlur(blur_radius))
+                    
+                final_image = bg_with_clock.copy()
+                final_image.paste(wp_img, (0, 0), mask)
+            else:
+                final_image = bg_with_clock
+                
+            if file_path.lower().endswith(".jpg") or file_path.lower().endswith(".jpeg"):
+                final_image.convert("RGB").save(file_path, "JPEG", quality=95)
+            else:
+                final_image.convert("RGB").save(file_path, "PNG")
+                
+            self.set_status("Wallpaper image saved successfully!")
+        except Exception as e:
+            self.set_status(f"Save failed: {e}")
             
     def apply_to_desktop(self):
         self.save_config()

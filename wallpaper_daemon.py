@@ -248,9 +248,14 @@ def on_toggle_pause(icon, item):
     print("Daemon paused:", paused)
 
 def on_launch_settings(icon, item):
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    cmd = ["python", os.path.join(script_dir, "gui.py")]
-    subprocess.Popen(cmd, cwd=script_dir)
+    if sys.executable.lower().endswith("python.exe") or sys.executable.lower().endswith("pythonw.exe"):
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        cmd = ["python", os.path.join(script_dir, "gui.py")]
+        cwd = script_dir
+    else:
+        cmd = [sys.executable]
+        cwd = os.path.dirname(sys.executable)
+    subprocess.Popen(cmd, cwd=cwd)
 
 def on_next_wallpaper(icon, item):
     threading.Thread(target=trigger_random_wallpaper, daemon=True).start()

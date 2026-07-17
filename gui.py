@@ -1113,12 +1113,15 @@ class DepthClockGUI(ctk.CTk):
                 pass
                 
         try:
-            if sys.executable.endswith("python.exe"):
+            # If running as python script
+            script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "depth_clock.py"))
+            if sys.executable.lower().endswith("python.exe") or sys.executable.lower().endswith("pythonw.exe"):
                 pythonw_exe = sys.executable.lower().replace("python.exe", "pythonw.exe")
+                cmd = [pythonw_exe, script_path, "--daemon"]
             else:
-                pythonw_exe = sys.executable
+                # If running as compiled exe, sys.executable points to depth_clock.exe
+                cmd = [sys.executable, "--daemon"]
                 
-            cmd = [pythonw_exe, "wallpaper_daemon.py"]
             self.renderer_process = subprocess.Popen(cmd, cwd=os.path.dirname(os.path.abspath(__file__)))
             self.set_status("Applied successfully!")
         except Exception as e:

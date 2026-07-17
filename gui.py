@@ -316,8 +316,11 @@ class DepthClockGUI(ctk.CTk):
         
         # --- DEPTH TAB ---
         ctk.CTkLabel(depth_tab, text="Outline Cutout Mode", font=("Segoe UI", 13, "bold")).pack(anchor="w", pady=(5, 2))
-        self.cutout_mode_dropdown = ctk.CTkComboBox(depth_tab, values=["Gradient Depth (MiDaS)", "Salient Subject (U-2-Net)"], command=self.on_cutout_mode_changed)
-        self.cutout_mode_dropdown.set(self.config_data.get("cutout_mode", "Gradient Depth (MiDaS)"))
+        self.cutout_mode_dropdown = ctk.CTkComboBox(depth_tab, values=["Gradient Depth (MiDaS)", "Salient Subject (U-2-Netp - 4.7MB)", "Salient Subject (U-2-Net - 176MB)"], command=self.on_cutout_mode_changed)
+        saved_mode = self.config_data.get("cutout_mode", "Gradient Depth (MiDaS)")
+        if saved_mode == "Salient Subject (U-2-Net)":
+            saved_mode = "Salient Subject (U-2-Netp - 4.7MB)"
+        self.cutout_mode_dropdown.set(saved_mode)
         self.cutout_mode_dropdown.pack(fill="x", pady=5)
         
         ctk.CTkLabel(depth_tab, text="Foreground Threshold", font=("Segoe UI", 13, "bold")).pack(anchor="w", pady=(10, 5))
@@ -692,15 +695,17 @@ class DepthClockGUI(ctk.CTk):
         
         def run_inference():
             try:
-                if cutout_mode == "Salient Subject (U-2-Net)":
-                    u2net_path = os.path.join(APP_DIR, "u2netp.onnx")
+                if "Salient Subject" in cutout_mode:
+                    model_type = "u2net" if "176MB" in cutout_mode else "u2netp"
+                    model_name = "U-2-Net (176MB)" if model_type == "u2net" else "U-2-Netp (4.7MB)"
+                    u2net_path = os.path.join(APP_DIR, "u2net.onnx" if model_type == "u2net" else "u2netp.onnx")
                     if not os.path.exists(u2net_path):
-                        self.after(0, lambda: self.set_status("Downloading U-2-Netp model (~4.7MB)..."))
+                        self.after(0, lambda: self.set_status(f"Downloading {model_name}..."))
                         from depth_engine import download_u2net
-                        download_u2net(self.update_download_progress)
+                        download_u2net(model_type, self.update_download_progress)
                         
-                    self.after(0, lambda: self.set_status("Running U-2-Net subject detection..."))
-                    mask_data = self.engine.compute_subject_mask(img_path)
+                    self.after(0, lambda: self.set_status(f"Running {model_name} subject detection..."))
+                    mask_data = self.engine.compute_subject_mask(img_path, model_type)
                 else:
                     self.after(0, lambda: self.set_status("Running MiDaS depth engine..."))
                     mask_data = self.engine.compute_depth(img_path)

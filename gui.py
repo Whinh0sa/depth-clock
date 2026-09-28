@@ -276,6 +276,15 @@ class DepthClockGUI(ctk.CTk):
             print("Failed to update startup configuration registry:", e)
         
     def create_widgets(self):
+        left_panel = self._create_left_panel()
+        self._create_wallpaper_actions(left_panel)
+        self._create_tabs(left_panel)
+
+        right_panel = self._create_right_panel()
+        self._create_system_options(right_panel)
+        self._create_action_buttons(right_panel)
+
+    def _create_left_panel(self):
         # Left Panel (Controls)
         left_panel = ctk.CTkScrollableFrame(self, width=420)
         left_panel.pack(side="left", fill="y", padx=15, pady=15)
@@ -285,7 +294,9 @@ class DepthClockGUI(ctk.CTk):
         
         self.status_label = ctk.CTkLabel(left_panel, text="Initializing...", font=("Segoe UI", 12, "italic"), text_color="gray")
         self.status_label.pack(anchor="w", padx=15, pady=(0, 10))
+        return left_panel
         
+    def _create_wallpaper_actions(self, left_panel):
         # Wallpaper Action Buttons
         wp_btn_frame = ctk.CTkFrame(left_panel, fg_color="transparent")
         wp_btn_frame.pack(fill="x", padx=15, pady=2)
@@ -301,19 +312,26 @@ class DepthClockGUI(ctk.CTk):
         self.wp_source_dropdown = ctk.CTkComboBox(left_panel, values=["Picsum Photos (Random)", "Curated Nature (Unsplash)", "Curated Space & Stars", "Curated Cities & Architecture"])
         self.wp_source_dropdown.set("Picsum Photos (Random)")
         self.wp_source_dropdown.pack(fill="x", padx=15, pady=2)
-        
+
+    def _create_tabs(self, left_panel):
         # Tabview for styling properties
-        tabview = ctk.CTkTabview(left_panel)
-        tabview.pack(fill="both", expand=True, padx=10, pady=5)
+        self.tabview = ctk.CTkTabview(left_panel)
+        self.tabview.pack(fill="both", expand=True, padx=10, pady=5)
         
-        depth_tab = tabview.add("Depth")
-        clock_tab = tabview.add("Clock Style")
-        position_tab = tabview.add("Clock Pos")
-        self.gallery_tab = tabview.add("Gallery")
+        depth_tab = self.tabview.add("Depth")
+        clock_tab = self.tabview.add("Clock Style")
+        position_tab = self.tabview.add("Clock Pos")
+        self.gallery_tab = self.tabview.add("Gallery")
         
         # Configure Tabview callbacks to refresh gallery when opened
-        tabview.configure(command=self.on_tab_changed)
+        self.tabview.configure(command=self.on_tab_changed)
         
+        self._create_depth_tab(depth_tab)
+        self._create_clock_style_tab(clock_tab)
+        self._create_clock_pos_tab(position_tab)
+        self._create_gallery_tab()
+
+    def _create_depth_tab(self, depth_tab):
         # --- DEPTH TAB ---
         ctk.CTkLabel(depth_tab, text="Outline Cutout Mode", font=("Segoe UI", 13, "bold")).pack(anchor="w", pady=(5, 2))
         self.cutout_mode_dropdown = ctk.CTkComboBox(depth_tab, values=["Gradient Depth (MiDaS)", "Salient Subject (U-2-Netp - 4.7MB)", "Salient Subject (U-2-Net - 176MB)"], command=self.on_cutout_mode_changed)
@@ -346,7 +364,8 @@ class DepthClockGUI(ctk.CTk):
         
         self.transition_val_lbl = ctk.CTkLabel(depth_tab, text=f"Width: {self.config_data.get('transition_width', 10)}px", font=("Segoe UI", 12))
         self.transition_val_lbl.pack(anchor="e")
-        
+
+    def _create_clock_style_tab(self, clock_tab):
         # --- CLOCK STYLE TAB ---
         ctk.CTkLabel(clock_tab, text="Font Family", font=("Segoe UI", 13, "bold")).pack(anchor="w", pady=(5, 5))
         self.font_combobox = ctk.CTkComboBox(clock_tab, values=["Segoe UI", "Arial", "Impact", "Georgia", "Courier New"], command=self.on_font_changed)
@@ -383,7 +402,8 @@ class DepthClockGUI(ctk.CTk):
         self.suggested_label.pack(anchor="w", pady=(5, 2))
         self.suggested_color_frame = ctk.CTkFrame(clock_tab, fg_color="transparent")
         self.suggested_color_frame.pack(fill="x", pady=2)
-        
+
+    def _create_clock_pos_tab(self, position_tab):
         # --- CLOCK POS TAB ---
         ctk.CTkLabel(position_tab, text="Horizontal Position (X)", font=("Segoe UI", 13, "bold")).pack(anchor="w", pady=(10, 5))
         self.pos_x_slider = ctk.CTkSlider(position_tab, from_=-1.0, to=2.0, command=self.on_pos_x_changed)
@@ -399,7 +419,8 @@ class DepthClockGUI(ctk.CTk):
         self.date_y_offset_slider = ctk.CTkSlider(position_tab, from_=-1.0, to=1.0, command=self.on_date_y_offset_changed)
         self.date_y_offset_slider.set(self.config_data.get("date_y_offset_ratio", -0.074))
         self.date_y_offset_slider.pack(fill="x", pady=5)
-        
+
+    def _create_gallery_tab(self):
         # --- GALLERY TAB ---
         ctk.CTkLabel(self.gallery_tab, text="Wallpaper History", font=("Segoe UI", 14, "bold")).pack(anchor="w", pady=(5, 5))
         self.gallery_hint = ctk.CTkLabel(self.gallery_tab, text="Click a thumbnail to load a past design instantly (no wait):", font=("Segoe UI", 11, "italic"), text_color="gray")
@@ -408,7 +429,8 @@ class DepthClockGUI(ctk.CTk):
         # Sub-container frame inside the scrollable left panel gallery tab
         self.gallery_grid_frame = ctk.CTkFrame(self.gallery_tab, fg_color="transparent")
         self.gallery_grid_frame.pack(fill="both", expand=True, pady=5)
-        
+
+    def _create_right_panel(self):
         # Right Panel (Preview & Action Hub)
         right_panel = ctk.CTkFrame(self)
         right_panel.pack(side="right", fill="both", expand=True, padx=15, pady=15)
@@ -433,7 +455,9 @@ class DepthClockGUI(ctk.CTk):
         
         self.preview_canvas.bind("<Button-1>", self.on_canvas_click)
         self.preview_canvas.bind("<B1-Motion>", self.on_canvas_drag)
-        
+        return right_panel
+
+    def _create_system_options(self, right_panel):
         # System & Time Options Grid (below canvas)
         sys_options_frame = ctk.CTkFrame(right_panel, fg_color="transparent")
         sys_options_frame.pack(fill="x", padx=15, pady=5)
@@ -472,7 +496,8 @@ class DepthClockGUI(ctk.CTk):
         else:
             self.startup_switch.deselect()
         self.startup_switch.grid(row=1, column=1, sticky="w", padx=10, pady=4)
-        
+
+    def _create_action_buttons(self, right_panel):
         # Action Buttons frame placed right below the System Options
         action_btn_frame = ctk.CTkFrame(right_panel, fg_color="transparent")
         action_btn_frame.pack(fill="x", padx=15, pady=10)
@@ -498,7 +523,6 @@ class DepthClockGUI(ctk.CTk):
         # Warning alignment tip
         alignment_note = ctk.CTkLabel(right_panel, text="* Actual desktop alignment matches preview exactly via screen aspect ratios.", font=("Segoe UI", 11, "italic"), text_color="gray")
         alignment_note.pack(pady=(0, 5))
-        
     def on_tab_changed(self, tab_name=None):
         if tab_name == "Gallery" or (hasattr(self, 'tabview') and self.tabview.get() == "Gallery"):
             self.load_gallery_thumbnails()

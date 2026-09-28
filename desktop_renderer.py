@@ -152,8 +152,14 @@ class DesktopRenderer:
             return
             
         try:
-            with open(CONFIG_PATH, "r") as f:
-                config = json.load(f)
+            current_mtime = os.path.getmtime(CONFIG_PATH)
+            if hasattr(self, '_last_config_mtime') and current_mtime == self._last_config_mtime:
+                config = self._cached_config
+            else:
+                with open(CONFIG_PATH, "r") as f:
+                    config = json.load(f)
+                self._cached_config = config
+                self._last_config_mtime = current_mtime
         except Exception as e:
             print(f"Error loading config: {e}")
             return

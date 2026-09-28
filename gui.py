@@ -7,10 +7,9 @@ import urllib.request
 import numpy as np
 import tkinter as tk
 from tkinter import filedialog
-from PIL import Image, ImageTk, ImageFilter, ImageDraw, ImageFont
+from PIL import Image, ImageTk, ImageFilter
 import customtkinter as ctk
 import win32api
-import win32con
 import ctypes
 import winreg
 import sys
@@ -639,7 +638,8 @@ class DepthClockGUI(ctk.CTk):
                 
                 self.process_wallpaper(RANDOM_WP_PATH)
             except Exception as e:
-                self.after(0, lambda: self.info_lbl.configure(text=f"Download Error: {e}"))
+                err_msg = str(e)
+                self.after(0, lambda: self.info_lbl.configure(text=f"Download Error: {err_msg}"))
                 self.after(0, lambda: self.set_status("Failed to fetch wallpaper."))
                 self.after(0, lambda: self.enable_controls(True))
                 
@@ -735,7 +735,8 @@ class DepthClockGUI(ctk.CTk):
                 
                 self.after(0, self.on_processing_complete)
             except Exception as e:
-                self.after(0, lambda: self.info_lbl.configure(text=f"Error: {e}"))
+                err_msg = str(e)
+                self.after(0, lambda: self.info_lbl.configure(text=f"Error: {err_msg}"))
                 self.after(0, lambda: self.set_status("Failed to generate cutout mask."))
                 self.after(0, lambda: self.enable_controls(True))
                 

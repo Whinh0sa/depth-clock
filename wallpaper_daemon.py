@@ -8,6 +8,7 @@ import random
 import urllib.request
 import subprocess
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
+from image_utils import resize_to_fill
 import win32api
 import win32gui
 import win32con
@@ -32,24 +33,6 @@ except:
 # Global state
 paused = False
 running = True
-
-def resize_to_fill(img, target_w, target_h):
-    img_w, img_h = img.size
-    img_aspect = img_w / img_h
-    target_aspect = target_w / target_h
-    
-    if img_aspect > target_aspect:
-        new_h = target_h
-        new_w = int(new_h * img_aspect)
-        img_resized = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-        start_x = (new_w - target_w) // 2
-        return img_resized.crop((start_x, 0, start_x + target_w, target_h))
-    else:
-        new_w = target_w
-        new_h = int(new_w / img_aspect)
-        img_resized = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-        start_y = (new_h - target_h) // 2
-        return img_resized.crop((0, start_y, target_w, start_y + target_h))
 
 def set_desktop_wallpaper(image_path):
     ctypes.windll.user32.SystemParametersInfoW(20, 0, image_path, 3)

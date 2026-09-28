@@ -86,6 +86,7 @@ def get_dominant_colors(image_path, num_colors=5):
         colors_sorted = sorted(colors, key=lambda x: x[0], reverse=True)
         
         hex_colors = []
+        rgb_colors = []
         for count, rgb in colors_sorted:
             if sum(rgb) < 50:
                 continue
@@ -93,16 +94,14 @@ def get_dominant_colors(image_path, num_colors=5):
             hex_val = f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}"
             
             is_similar = False
-            for existing in hex_colors:
-                r2 = int(existing[1:3], 16)
-                g2 = int(existing[3:5], 16)
-                b2 = int(existing[5:7], 16)
-                dist = ((rgb[0] - r2)**2 + (rgb[1] - g2)**2 + (rgb[2] - b2)**2)**0.5
+            for existing_rgb in rgb_colors:
+                dist = ((rgb[0] - existing_rgb[0])**2 + (rgb[1] - existing_rgb[1])**2 + (rgb[2] - existing_rgb[2])**2)**0.5
                 if dist < 45:
                     is_similar = True
                     break
             if not is_similar:
                 hex_colors.append(hex_val)
+                rgb_colors.append(rgb)
                 if len(hex_colors) >= num_colors:
                     break
         return hex_colors

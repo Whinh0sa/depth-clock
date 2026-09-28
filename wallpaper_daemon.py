@@ -33,6 +33,9 @@ except:
 paused = False
 running = True
 
+_cached_config = None
+_cached_config_mtime = 0
+
 def resize_to_fill(img, target_w, target_h):
     img_w, img_h = img.size
     img_aspect = img_w / img_h
@@ -94,12 +97,18 @@ def is_fullscreen_app_active(screen_w, screen_h):
     return False
 
 def render_and_apply():
+    global _cached_config, _cached_config_mtime
+
     if not os.path.exists(CONFIG_PATH):
         return False
         
     try:
-        with open(CONFIG_PATH, "r") as f:
-            config = json.load(f)
+        current_mtime = os.path.getmtime(CONFIG_PATH)
+        if _cached_config is None or current_mtime > _cached_config_mtime:
+            with open(CONFIG_PATH, "r") as f:
+                _cached_config = json.load(f)
+            _cached_config_mtime = current_mtime
+        config = _cached_config
     except Exception as e:
         print(f"Error loading config: {e}")
         return False

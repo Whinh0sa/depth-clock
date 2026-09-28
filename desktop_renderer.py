@@ -111,6 +111,16 @@ class DesktopRenderer:
         self.bg_item = None
         self.fg_item = None
         
+        # Cache variables
+        self._cached_wallpaper_path = None
+        self._cached_depth_map_path = None
+        self._cached_threshold = None
+        self._cached_blur_radius = None
+        self._cached_width = None
+        self._cached_height = None
+        self._cached_wp_img = None
+        self._cached_fg_img = None
+
         # Set up Win32 window properties
         self.root.update() # Force window creation to get valid HWND
         self.hwnd = self.root.winfo_id()
@@ -174,11 +184,44 @@ class DesktopRenderer:
         if not os.path.exists(wallpaper_path):
             return
             
-        # Load and resize wallpaper to fill the screen dimensions exactly (keeping aspect ratio)
-        wp_raw = Image.open(wallpaper_path).convert("RGBA")
-        wp_img = resize_to_fill(wp_raw, self.screen_width, self.screen_height)
+        # Check if we need to reload images
+        needs_reload = (
+            self._cached_wallpaper_path != wallpaper_path or
+            self._cached_depth_map_path != depth_map_path or
+            self._cached_threshold != threshold or
+            self._cached_blur_radius != blur_radius or
+            self._cached_width != self.screen_width or
+            self._cached_height != self.screen_height
+        )
+
+        if needs_reload:
+            # Load and resize wallpaper to fill the screen dimensions exactly (keeping aspect ratio)
+            wp_raw = Image.open(wallpaper_path).convert("RGBA")
+            self._cached_wp_img = resize_to_fill(wp_raw, self.screen_width, self.screen_height)
+
+            # Create masked foreground layer
+            self._cached_fg_img = None
+            if os.path.exists(depth_map_path):
+                depth_raw = Image.open(depth_map_path).convert("L")
+                depth_img = resize_to_fill(depth_raw, self.screen_width, self.screen_height)
+
+                # Apply threshold to create mask
+                mask = depth_img.point(lambda p: 255 if p >= threshold else 0)
+                if blur_radius > 0:
+                    mask = mask.filter(ImageFilter.GaussianBlur(blur_radius))
+
+                self._cached_fg_img = self._cached_wp_img.copy()
+                self._cached_fg_img.putalpha(mask)
+
+            # Update cache variables
+            self._cached_wallpaper_path = wallpaper_path
+            self._cached_depth_map_path = depth_map_path
+            self._cached_threshold = threshold
+            self._cached_blur_radius = blur_radius
+            self._cached_width = self.screen_width
+            self._cached_height = self.screen_height
         
-        self.bg_photo = ImageTk.PhotoImage(wp_img)
+        self.bg_photo = ImageTk.PhotoImage(self._cached_wp_img)
         
         # Set background image
         if self.bg_item:
@@ -201,20 +244,8 @@ class DesktopRenderer:
                 anchor="center"
             )
             
-        # Create masked foreground layer
-        if os.path.exists(depth_map_path):
-            depth_raw = Image.open(depth_map_path).convert("L")
-            depth_img = resize_to_fill(depth_raw, self.screen_width, self.screen_height)
-            
-            # Apply threshold to create mask
-            mask = depth_img.point(lambda p: 255 if p >= threshold else 0)
-            if blur_radius > 0:
-                mask = mask.filter(ImageFilter.GaussianBlur(blur_radius))
-                
-            fg_img = wp_img.copy()
-            fg_img.putalpha(mask)
-            
-            self.fg_photo = ImageTk.PhotoImage(fg_img)
+        if self._cached_fg_img:
+            self.fg_photo = ImageTk.PhotoImage(self._cached_fg_img)
             
             if self.fg_item:
                 self.canvas.itemconfig(self.fg_item, image=self.fg_photo)

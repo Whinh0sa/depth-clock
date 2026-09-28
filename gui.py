@@ -972,85 +972,91 @@ class DepthClockGUI(ctk.CTk):
             target_wallpaper = os.path.join(APP_DIR, "wallpaper.png")
             target_depth_map = os.path.join(APP_DIR, "wallpaper_depth.png")
             
-            with zipfile.ZipFile(file_path, 'r') as zipf:
-                zipf.extract("wallpaper.png", APP_DIR)
-                zipf.extract("depth_map.png", APP_DIR)
-                config_content = zipf.read("config.json").decode("utf-8")
-                
-            extracted_depth = os.path.join(APP_DIR, "depth_map.png")
-            if os.path.exists(extracted_depth):
-                if os.path.exists(target_depth_map):
-                    os.remove(target_depth_map)
-                os.rename(extracted_depth, target_depth_map)
-                
-            imported_config = json.loads(config_content)
-            
-            imported_config["wallpaper_path"] = target_wallpaper
-            imported_config["depth_map_path"] = target_depth_map
-            
-            self.config_data.update(imported_config)
-            self.save_config()
-            
-            self.wallpaper_path = target_wallpaper
-            
-            self.raw_wp_image = resize_to_fill(Image.open(target_wallpaper).convert("RGBA"), self.preview_canvas_w, self.preview_canvas_h)
-            self.raw_depth_image = resize_to_fill(Image.open(target_depth_map).convert("L"), self.preview_canvas_w, self.preview_canvas_h)
-            self.extracted_colors = get_dominant_colors(target_wallpaper, num_colors=5)
-            
-            self.threshold_slider.set(self.config_data["threshold"])
-            self.threshold_val_lbl.configure(text=f"Value: {self.config_data['threshold']}")
-            
-            self.blur_slider.set(self.config_data["blur_radius"])
-            self.blur_val_lbl.configure(text=f"Radius: {self.config_data['blur_radius']}px")
-            
-            self.transition_slider.set(self.config_data.get("transition_width", 10))
-            self.transition_val_lbl.configure(text=f"Width: {self.config_data.get('transition_width', 10)}px")
-            
-            self.font_combobox.set(self.config_data["font_family"])
-            
-            self.font_size_slider.set(self.config_data["font_size"])
-            self.font_size_val_lbl.configure(text=f"{self.config_data['font_size']} px")
-            
-            self.cutout_mode_dropdown.set(self.config_data.get("cutout_mode", "Gradient Depth (MiDaS)"))
-            
-            if self.config_data["format_24h"]:
-                self.format_switch.select()
-            else:
-                self.format_switch.deselect()
-                
-            if self.config_data.get("show_date", True):
-                self.date_switch.select()
-            else:
-                self.date_switch.deselect()
-                
-            if self.config_data.get("sync_lockscreen", False):
-                self.sync_lockscreen_switch.select()
-            else:
-                self.sync_lockscreen_switch.deselect()
-                
-            if self.config_data.get("auto_color", False):
-                self.auto_color_switch.select()
-            else:
-                self.auto_color_switch.deselect()
-                
-            self.pos_x_slider.set(self.config_data["pos_x_ratio"])
-            self.pos_y_slider.set(self.config_data["pos_y_ratio"])
-            self.date_y_offset_slider.set(self.config_data.get("date_y_offset_ratio", -0.074))
-            
-            # Copy imported package items directly to history gallery
-            h = get_file_hash(target_wallpaper)
-            cached_wp = os.path.join(GALLERY_DIR, f"{h}.png")
-            cached_depth = os.path.join(GALLERY_DEPTH_DIR, f"{h}.png")
-            if not os.path.exists(cached_wp):
-                shutil.copy(target_wallpaper, cached_wp)
-            if not os.path.exists(cached_depth):
-                shutil.copy(target_depth_map, cached_depth)
+            self._extract_package(file_path, target_depth_map)
+            self._update_internal_state(target_wallpaper, target_depth_map)
+            self._sync_ui_from_config()
+            self._copy_to_gallery(target_wallpaper, target_depth_map)
             
             self.update_suggested_colors()
             self.update_preview()
             self.set_status("Package imported successfully!")
         except Exception as e:
             self.set_status(f"Import failed: {e}")
+
+    def _extract_package(self, file_path, target_depth_map):
+        with zipfile.ZipFile(file_path, 'r') as zipf:
+            zipf.extract("wallpaper.png", APP_DIR)
+            zipf.extract("depth_map.png", APP_DIR)
+            config_content = zipf.read("config.json").decode("utf-8")
+            
+        extracted_depth = os.path.join(APP_DIR, "depth_map.png")
+        if os.path.exists(extracted_depth):
+            if os.path.exists(target_depth_map):
+                os.remove(target_depth_map)
+            os.rename(extracted_depth, target_depth_map)
+            
+        imported_config = json.loads(config_content)
+        self.config_data.update(imported_config)
+
+    def _update_internal_state(self, target_wallpaper, target_depth_map):
+        self.config_data["wallpaper_path"] = target_wallpaper
+        self.config_data["depth_map_path"] = target_depth_map
+        self.save_config()
+
+        self.wallpaper_path = target_wallpaper
+        self.raw_wp_image = resize_to_fill(Image.open(target_wallpaper).convert("RGBA"), self.preview_canvas_w, self.preview_canvas_h)
+        self.raw_depth_image = resize_to_fill(Image.open(target_depth_map).convert("L"), self.preview_canvas_w, self.preview_canvas_h)
+        self.extracted_colors = get_dominant_colors(target_wallpaper, num_colors=5)
+
+    def _sync_ui_from_config(self):
+        self.threshold_slider.set(self.config_data["threshold"])
+        self.threshold_val_lbl.configure(text=f"Value: {self.config_data['threshold']}")
+
+        self.blur_slider.set(self.config_data["blur_radius"])
+        self.blur_val_lbl.configure(text=f"Radius: {self.config_data['blur_radius']}px")
+
+        transition_width = self.config_data.get("transition_width", 10)
+        self.transition_slider.set(transition_width)
+        self.transition_val_lbl.configure(text=f"Width: {transition_width}px")
+
+        self.font_combobox.set(self.config_data["font_family"])
+        self.font_size_slider.set(self.config_data["font_size"])
+        self.font_size_val_lbl.configure(text=f"{self.config_data['font_size']} px")
+
+        self.cutout_mode_dropdown.set(self.config_data.get("cutout_mode", "Gradient Depth (MiDaS)"))
+
+        if self.config_data["format_24h"]:
+            self.format_switch.select()
+        else:
+            self.format_switch.deselect()
+            
+        if self.config_data.get("show_date", True):
+            self.date_switch.select()
+        else:
+            self.date_switch.deselect()
+            
+        if self.config_data.get("sync_lockscreen", False):
+            self.sync_lockscreen_switch.select()
+        else:
+            self.sync_lockscreen_switch.deselect()
+            
+        if self.config_data.get("auto_color", False):
+            self.auto_color_switch.select()
+        else:
+            self.auto_color_switch.deselect()
+            
+        self.pos_x_slider.set(self.config_data["pos_x_ratio"])
+        self.pos_y_slider.set(self.config_data["pos_y_ratio"])
+        self.date_y_offset_slider.set(self.config_data.get("date_y_offset_ratio", -0.074))
+
+    def _copy_to_gallery(self, target_wallpaper, target_depth_map):
+        h = get_file_hash(target_wallpaper)
+        cached_wp = os.path.join(GALLERY_DIR, f"{h}.png")
+        cached_depth = os.path.join(GALLERY_DEPTH_DIR, f"{h}.png")
+        if not os.path.exists(cached_wp):
+            shutil.copy(target_wallpaper, cached_wp)
+        if not os.path.exists(cached_depth):
+            shutil.copy(target_depth_map, cached_depth)
             
     def save_standalone_wallpaper(self):
         if not self.wallpaper_path or not os.path.exists(self.wallpaper_path):

@@ -10,8 +10,6 @@ import subprocess
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 import win32api
 import win32gui
-import win32con
-import win32process
 import pystray
 from pystray import MenuItem as item
 

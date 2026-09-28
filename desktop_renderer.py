@@ -6,7 +6,6 @@ from PIL import Image, ImageTk, ImageFilter
 import win32gui
 import win32con
 import win32api
-import win32process
 import ctypes
 
 # Enable DPI Awareness to fix resolution and positioning issues on scaled displays

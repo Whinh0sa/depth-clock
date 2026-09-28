@@ -20,6 +20,10 @@ CONFIG_PATH = os.path.join(APP_DIR, "config.json")
 TEMP_WALLPAPER_PATH = os.path.join(APP_DIR, "depth_wallpaper.png")
 RANDOM_WP_PATH = os.path.join(APP_DIR, "random_wallpaper.jpg")
 
+# Image caching
+_cached_wp = {"path": None, "mtime": None, "w": None, "h": None, "img": None}
+_cached_depth = {"path": None, "mtime": None, "w": None, "h": None, "np": None}
+
 # Enable DPI Awareness
 try:
     ctypes.windll.shcore.SetProcessDpiAwareness(2)
@@ -94,6 +98,8 @@ def is_fullscreen_app_active(screen_w, screen_h):
     return False
 
 def render_and_apply():
+    global _cached_wp, _cached_depth
+
     if not os.path.exists(CONFIG_PATH):
         return False
         
@@ -124,8 +130,24 @@ def render_and_apply():
     screen_h = win32api.GetSystemMetrics(1)
     
     # 1. Load wallpaper and crop to cover screen
-    wp_raw = Image.open(wallpaper_path).convert("RGBA")
-    wp_img = resize_to_fill(wp_raw, screen_w, screen_h)
+    try:
+        wp_mtime = os.path.getmtime(wallpaper_path)
+    except Exception:
+        wp_mtime = 0
+
+    if (_cached_wp["path"] == wallpaper_path and
+        _cached_wp["mtime"] == wp_mtime and
+        _cached_wp["w"] == screen_w and
+        _cached_wp["h"] == screen_h):
+        wp_img = _cached_wp["img"]
+    else:
+        wp_raw = Image.open(wallpaper_path).convert("RGBA")
+        wp_img = resize_to_fill(wp_raw, screen_w, screen_h)
+        _cached_wp["path"] = wallpaper_path
+        _cached_wp["mtime"] = wp_mtime
+        _cached_wp["w"] = screen_w
+        _cached_wp["h"] = screen_h
+        _cached_wp["img"] = wp_img
     
     # 2. Draw text on a copy of the wallpaper
     bg_with_clock = wp_img.copy()
@@ -165,10 +187,25 @@ def render_and_apply():
     
     # 3. Apply foreground mask
     if os.path.exists(depth_map_path):
-        depth_raw = Image.open(depth_map_path).convert("L")
-        depth_img = resize_to_fill(depth_raw, screen_w, screen_h)
-        
-        depth_np = np.array(depth_img, dtype=np.float32)
+        try:
+            depth_mtime = os.path.getmtime(depth_map_path)
+        except Exception:
+            depth_mtime = 0
+
+        if (_cached_depth["path"] == depth_map_path and
+            _cached_depth["mtime"] == depth_mtime and
+            _cached_depth["w"] == screen_w and
+            _cached_depth["h"] == screen_h):
+            depth_np = _cached_depth["np"]
+        else:
+            depth_raw = Image.open(depth_map_path).convert("L")
+            depth_img = resize_to_fill(depth_raw, screen_w, screen_h)
+            depth_np = np.array(depth_img, dtype=np.float32)
+            _cached_depth["path"] = depth_map_path
+            _cached_depth["mtime"] = depth_mtime
+            _cached_depth["w"] = screen_w
+            _cached_depth["h"] = screen_h
+            _cached_depth["np"] = depth_np
         w = max(1, transition_width)
         t = (depth_np - (threshold - w)) / (2 * w)
         t = np.clip(t, 0.0, 1.0)

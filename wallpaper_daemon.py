@@ -33,6 +33,16 @@ except:
 paused = False
 running = True
 
+# Cache state for render loop optimization
+_cached_wp_path = None
+_cached_wp_img = None
+_cached_depth_path = None
+_cached_depth_img = None
+_cached_wp_screen_w = None
+_cached_wp_screen_h = None
+_cached_depth_screen_w = None
+_cached_depth_screen_h = None
+
 def resize_to_fill(img, target_w, target_h):
     img_w, img_h = img.size
     img_aspect = img_w / img_h
@@ -94,6 +104,9 @@ def is_fullscreen_app_active(screen_w, screen_h):
     return False
 
 def render_and_apply():
+    global _cached_wp_path, _cached_wp_img, _cached_depth_path, _cached_depth_img
+    global _cached_wp_screen_w, _cached_wp_screen_h, _cached_depth_screen_w, _cached_depth_screen_h
+
     if not os.path.exists(CONFIG_PATH):
         return False
         
@@ -124,8 +137,18 @@ def render_and_apply():
     screen_h = win32api.GetSystemMetrics(1)
     
     # 1. Load wallpaper and crop to cover screen
-    wp_raw = Image.open(wallpaper_path).convert("RGBA")
-    wp_img = resize_to_fill(wp_raw, screen_w, screen_h)
+    if (_cached_wp_img is not None and
+        _cached_wp_path == wallpaper_path and
+        _cached_wp_screen_w == screen_w and
+        _cached_wp_screen_h == screen_h):
+        wp_img = _cached_wp_img
+    else:
+        wp_raw = Image.open(wallpaper_path).convert("RGBA")
+        wp_img = resize_to_fill(wp_raw, screen_w, screen_h)
+        _cached_wp_path = wallpaper_path
+        _cached_wp_img = wp_img
+        _cached_wp_screen_w = screen_w
+        _cached_wp_screen_h = screen_h
     
     # 2. Draw text on a copy of the wallpaper
     bg_with_clock = wp_img.copy()
@@ -165,9 +188,19 @@ def render_and_apply():
     
     # 3. Apply foreground mask
     if os.path.exists(depth_map_path):
-        depth_raw = Image.open(depth_map_path).convert("L")
-        depth_img = resize_to_fill(depth_raw, screen_w, screen_h)
-        
+        if (_cached_depth_img is not None and
+            _cached_depth_path == depth_map_path and
+            _cached_depth_screen_w == screen_w and
+            _cached_depth_screen_h == screen_h):
+            depth_img = _cached_depth_img
+        else:
+            depth_raw = Image.open(depth_map_path).convert("L")
+            depth_img = resize_to_fill(depth_raw, screen_w, screen_h)
+            _cached_depth_path = depth_map_path
+            _cached_depth_img = depth_img
+            _cached_depth_screen_w = screen_w
+            _cached_depth_screen_h = screen_h
+
         depth_np = np.array(depth_img, dtype=np.float32)
         w = max(1, transition_width)
         t = (depth_np - (threshold - w)) / (2 * w)

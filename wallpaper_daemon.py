@@ -14,6 +14,7 @@ import win32con
 import win32process
 import pystray
 from pystray import MenuItem as item
+import base64
 
 APP_DIR = os.path.join(os.path.expanduser("~"), ".depthclock")
 CONFIG_PATH = os.path.join(APP_DIR, "config.json")
@@ -60,15 +61,17 @@ def set_lockscreen_wallpaper(image_path):
     Works natively on Windows 10/11 without requiring administrative rights.
     """
     abs_path = os.path.abspath(image_path)
-    ps_cmd = (
+    safe_path = abs_path.replace("'", "''")
+    ps_script = (
         f'[Windows.System.UserProfile.LockScreen, Windows.System.UserProfile, ContentType=WindowsRuntime] | Out-Null; '
         f'[Windows.Storage.StorageFile, Windows.Storage, ContentType=WindowsRuntime] | Out-Null; '
-        f'$file = [Windows.Storage.StorageFile]::GetFileFromPathAsync("{abs_path}").GetAwaiter().GetResult(); '
+        f'$file = [Windows.Storage.StorageFile]::GetFileFromPathAsync(\'{safe_path}\').GetAwaiter().GetResult(); '
         f'[Windows.System.UserProfile.LockScreen]::SetImageFileAsync($file).GetAwaiter().GetResult();'
     )
+    encoded_cmd = base64.b64encode(ps_script.encode('utf-16le')).decode('utf-8')
     try:
-        # Run PowerShell silently
-        subprocess.run(["powershell", "-WindowStyle", "Hidden", "-Command", ps_cmd], capture_output=True)
+        # Run PowerShell silently via EncodedCommand
+        subprocess.run(["powershell", "-WindowStyle", "Hidden", "-EncodedCommand", encoded_cmd], capture_output=True)
         print("Lockscreen wallpaper sync complete.")
     except Exception as e:
         print("Failed to sync lockscreen wallpaper:", e)

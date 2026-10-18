@@ -1,11 +1,16 @@
 import os
 import urllib.request
 import numpy as np
+import hashlib
 from PIL import Image
 
 MODEL_URL = "https://github.com/intel-isl/MiDaS/releases/download/v2_1/model-small.onnx"
 U2NETP_URL = "https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2netp.onnx"
 U2NET_URL = "https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2net.onnx"
+
+MODEL_HASH = "2d8c6cb8f415229daf1eb041024208e2608c9f98e17c81cc7c6ecb449c56fd58"
+U2NETP_HASH = "309c8469258dda742793dce0ebea8e6dd393174f89934733ecc8b14c76f4ddd8"
+U2NET_HASH = "8d10d2f3bb75ae3b6d527c77944fc5e7dcd94b29809d47a739a7a728a912b491"
 
 APP_DIR = os.path.join(os.path.expanduser("~"), ".depthclock")
 MODEL_PATH = os.path.join(APP_DIR, "model-small.onnx")
@@ -16,11 +21,27 @@ def ensure_app_dir():
     if not os.path.exists(APP_DIR):
         os.makedirs(APP_DIR)
 
-def download_model_file(url, target_path, name, progress_callback=None):
+def verify_file_hash(filepath, expected_hash):
+    if not os.path.exists(filepath):
+        return False
+    hasher = hashlib.sha256()
+    with open(filepath, 'rb') as f:
+        for chunk in iter(lambda: f.read(4096), b""):
+            hasher.update(chunk)
+    return hasher.hexdigest() == expected_hash
+
+def download_model_file(url, target_path, name, expected_hash, progress_callback=None):
     ensure_app_dir()
     if os.path.exists(target_path):
-        if os.path.getsize(target_path) > 1 * 1024 * 1024: # Must be larger than 1MB
+        if verify_file_hash(target_path, expected_hash):
             return True
+        else:
+            print(f"Existing {name} model failed integrity check. Re-downloading...")
+            try:
+                os.remove(target_path)
+            except Exception as e:
+                print(f"Failed to remove corrupted {name} model: {e}")
+                return False
             
     print(f"Downloading {name} ONNX model...")
     try:
@@ -35,6 +56,10 @@ def download_model_file(url, target_path, name, progress_callback=None):
             
         urllib.request.urlretrieve(url, target_path, reporthook=report)
         print(f"\nDownload complete for {name}.")
+
+        if not verify_file_hash(target_path, expected_hash):
+            raise ValueError(f"Downloaded file for {name} failed integrity check.")
+
         return True
     except Exception as e:
         print(f"\nError downloading {name} model: {e}")
@@ -46,13 +71,13 @@ def download_model_file(url, target_path, name, progress_callback=None):
         return False
 
 def download_model(progress_callback=None):
-    return download_model_file(MODEL_URL, MODEL_PATH, "MiDaS Depth", progress_callback)
+    return download_model_file(MODEL_URL, MODEL_PATH, "MiDaS Depth", MODEL_HASH, progress_callback)
 
 def download_u2net(model_type="u2netp", progress_callback=None):
     if model_type == "u2net":
-        return download_model_file(U2NET_URL, U2NET_PATH, "U-2-Net (176MB)", progress_callback)
+        return download_model_file(U2NET_URL, U2NET_PATH, "U-2-Net (176MB)", U2NET_HASH, progress_callback)
     else:
-        return download_model_file(U2NETP_URL, U2NETP_PATH, "U-2-Netp (4.7MB)", progress_callback)
+        return download_model_file(U2NETP_URL, U2NETP_PATH, "U-2-Netp (4.7MB)", U2NETP_HASH, progress_callback)
 
 class DepthEngine:
     def __init__(self):

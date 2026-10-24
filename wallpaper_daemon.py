@@ -7,6 +7,28 @@ import threading
 import random
 import urllib.request
 import subprocess
+
+CURATED_WALLPAPERS = {
+    "Curated Nature (Unsplash)": [
+        "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?auto=format&fit=crop&q=80&w=1920",
+        "https://images.unsplash.com/photo-1447752875215-b2761acb3c5d?auto=format&fit=crop&q=80&w=1920",
+        "https://images.unsplash.com/photo-1472214222541-d510753a8707?auto=format&fit=crop&q=80&w=1920",
+        "https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&q=80&w=1920",
+        "https://images.unsplash.com/photo-1501854140801-50d01698950b?auto=format&fit=crop&q=80&w=1920"
+    ],
+    "Curated Space & Stars": [
+        "https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&q=80&w=1920",
+        "https://images.unsplash.com/photo-1506318137071-a8e063b4bec0?auto=format&fit=crop&q=80&w=1920",
+        "https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?auto=format&fit=crop&q=80&w=1920",
+        "https://images.unsplash.com/photo-1538370965046-79c0d6907d47?auto=format&fit=crop&q=80&w=1920"
+    ],
+    "Curated Cities & Architecture": [
+        "https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?auto=format&fit=crop&q=80&w=1920",
+        "https://images.unsplash.com/photo-1519501025264-65ba15a82390?auto=format&fit=crop&q=80&w=1920",
+        "https://images.unsplash.com/photo-1480714378408-67cf0d13bc1b?auto=format&fit=crop&q=80&w=1920",
+        "https://images.unsplash.com/photo-1449844908441-8829872d2607?auto=format&fit=crop&q=80&w=1920"
+    ]
+}
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 import win32api
 import win32gui
@@ -235,13 +257,27 @@ def render_and_apply():
 def trigger_random_wallpaper():
     try:
         print("Fetching random wallpaper...")
-        sig = random.randint(1, 100000)
-        screen_w = win32api.GetSystemMetrics(0)
-        screen_h = win32api.GetSystemMetrics(1)
-        url = f"https://picsum.photos/{screen_w}/{screen_h}?random={sig}"
+
+        # Load config to check random_wp_source
+        if os.path.exists(CONFIG_PATH):
+            with open(CONFIG_PATH, "r") as f:
+                config = json.load(f)
+        else:
+            config = {}
+
+        source = config.get("random_wp_source", "Picsum Photos (Random)")
+
+        if source in CURATED_WALLPAPERS:
+            url = random.choice(CURATED_WALLPAPERS[source])
+        else:
+            sig = random.randint(1, 100000)
+            screen_w = win32api.GetSystemMetrics(0)
+            screen_h = win32api.GetSystemMetrics(1)
+            url = f"https://picsum.photos/{screen_w}/{screen_h}?random={sig}"
         
         headers = {'User-Agent': 'Mozilla/5.0'}
         req = urllib.request.Request(url, headers=headers)
+
         
         with urllib.request.urlopen(req) as response:
             with open(RANDOM_WP_PATH, 'wb') as out_file:

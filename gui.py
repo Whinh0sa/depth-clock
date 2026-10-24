@@ -164,6 +164,7 @@ class DepthClockGUI(ctk.CTk):
         self.preview_canvas_h = int(self.preview_canvas_w / screen_aspect)
         
         self.config_data = {
+            "random_wp_source": "Picsum Photos (Random)",
             "wallpaper_path": "",
             "depth_map_path": "",
             "threshold": 128,
@@ -298,8 +299,8 @@ class DepthClockGUI(ctk.CTk):
         
         # Wallpaper Source Selector
         ctk.CTkLabel(left_panel, text="Random Wallpaper Source", font=("Segoe UI", 12, "bold")).pack(anchor="w", padx=15, pady=(5, 2))
-        self.wp_source_dropdown = ctk.CTkComboBox(left_panel, values=["Picsum Photos (Random)", "Curated Nature (Unsplash)", "Curated Space & Stars", "Curated Cities & Architecture"])
-        self.wp_source_dropdown.set("Picsum Photos (Random)")
+        self.wp_source_dropdown = ctk.CTkComboBox(left_panel, values=["Picsum Photos (Random)", "Curated Nature (Unsplash)", "Curated Space & Stars", "Curated Cities & Architecture"], command=self.on_wp_source_changed)
+        self.wp_source_dropdown.set(self.config_data.get("random_wp_source", "Picsum Photos (Random)"))
         self.wp_source_dropdown.pack(fill="x", padx=15, pady=2)
         
         # Tabview for styling properties
@@ -924,6 +925,10 @@ class DepthClockGUI(ctk.CTk):
         self.save_config()
         self.update_preview()
         
+    def on_wp_source_changed(self, value):
+        self.config_data["random_wp_source"] = value
+        self.save_config()
+
     def export_depthpkg(self):
         if not self.wallpaper_path or not os.path.exists(self.wallpaper_path):
             self.set_status("No wallpaper loaded to export.")

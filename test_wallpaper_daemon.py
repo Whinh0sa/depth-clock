@@ -10,6 +10,14 @@ sys.modules['win32gui'] = MagicMock()
 sys.modules['win32con'] = MagicMock()
 sys.modules['win32process'] = MagicMock()
 sys.modules['pystray'] = MagicMock()
+sys.modules['numpy'] = MagicMock()
+sys.modules['ctypes'] = MagicMock()
+sys.modules['PIL'] = MagicMock()
+sys.modules['PIL.Image'] = MagicMock()
+sys.modules['PIL.ImageDraw'] = MagicMock()
+sys.modules['PIL.ImageFont'] = MagicMock()
+sys.modules['PIL.ImageFilter'] = MagicMock()
+sys.modules['depth_engine'] = MagicMock()
 
 import wallpaper_daemon
 

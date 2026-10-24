@@ -293,12 +293,12 @@ class DepthClockGUI(ctk.CTk):
         self.select_wp_btn = ctk.CTkButton(wp_btn_frame, text="Choose Wallpaper", width=180, command=self.choose_wallpaper, state="disabled")
         self.select_wp_btn.pack(side="left", padx=(0, 10))
         
-        self.rand_wp_btn = ctk.CTkButton(wp_btn_frame, text="Random Wallpaper", width=180, fg_color="#34495e", hover_color="#2c3e50", command=self.fetch_random_wallpaper, state="disabled")
+        self.rand_wp_btn = ctk.CTkButton(wp_btn_frame, text="Random Wallpaper", width=180, fg_color="transparent", border_width=1, text_color=("gray10", "#DCE4EE"), command=self.fetch_random_wallpaper, state="disabled")
         self.rand_wp_btn.pack(side="right")
         
         # Wallpaper Source Selector
-        ctk.CTkLabel(left_panel, text="Random Wallpaper Source", font=("Segoe UI", 12, "bold")).pack(anchor="w", padx=15, pady=(5, 2))
-        self.wp_source_dropdown = ctk.CTkComboBox(left_panel, values=["Picsum Photos (Random)", "Curated Nature (Unsplash)", "Curated Space & Stars", "Curated Cities & Architecture"])
+        ctk.CTkLabel(left_panel, text="Wallpaper Source", font=("Segoe UI", 12)).pack(anchor="w", padx=15, pady=(5, 2))
+        self.wp_source_dropdown = ctk.CTkComboBox(left_panel, width=380, values=["Picsum Photos (Random)", "Curated Nature (Unsplash)", "Curated Space & Stars", "Curated Cities & Architecture"])
         self.wp_source_dropdown.set("Picsum Photos (Random)")
         self.wp_source_dropdown.pack(fill="x", padx=15, pady=2)
         
@@ -477,19 +477,19 @@ class DepthClockGUI(ctk.CTk):
         action_btn_frame = ctk.CTkFrame(right_panel, fg_color="transparent")
         action_btn_frame.pack(fill="x", padx=15, pady=10)
         
-        self.import_pkg_btn = ctk.CTkButton(action_btn_frame, text="Import Pkg", width=110, fg_color="#d35400", hover_color="#e67e22", command=self.import_depthpkg, state="disabled")
+        self.import_pkg_btn = ctk.CTkButton(action_btn_frame, text="Import", width=90, fg_color="transparent", border_width=1, text_color=("gray10", "#DCE4EE"), command=self.import_depthpkg, state="disabled")
         self.import_pkg_btn.pack(side="left", padx=(0, 6))
         
-        self.export_pkg_btn = ctk.CTkButton(action_btn_frame, text="Export Pkg", width=110, fg_color="#2980b9", hover_color="#3498db", command=self.export_depthpkg, state="disabled")
+        self.export_pkg_btn = ctk.CTkButton(action_btn_frame, text="Export", width=90, fg_color="transparent", border_width=1, text_color=("gray10", "#DCE4EE"), command=self.export_depthpkg, state="disabled")
         self.export_pkg_btn.pack(side="left", padx=(0, 6))
         
-        self.rand_style_btn = ctk.CTkButton(action_btn_frame, text="Random Style", width=110, fg_color="#9b59b6", hover_color="#8e44ad", command=self.randomize_styles, state="disabled")
+        self.rand_style_btn = ctk.CTkButton(action_btn_frame, text="Random Style", width=100, fg_color="transparent", border_width=1, text_color=("gray10", "#DCE4EE"), command=self.randomize_styles, state="disabled")
         self.rand_style_btn.pack(side="left", padx=(0, 6))
         
-        self.save_img_btn = ctk.CTkButton(action_btn_frame, text="Save Image", width=110, fg_color="#e67e22", hover_color="#d35400", command=self.save_standalone_wallpaper, state="disabled")
+        self.save_img_btn = ctk.CTkButton(action_btn_frame, text="Save Image", width=100, fg_color="transparent", border_width=1, text_color=("gray10", "#DCE4EE"), command=self.save_standalone_wallpaper, state="disabled")
         self.save_img_btn.pack(side="left", padx=(0, 6))
         
-        apply_btn = ctk.CTkButton(action_btn_frame, text="Apply Wallpaper", width=140, font=("Segoe UI", 13, "bold"), fg_color="#2ecc71", hover_color="#27ae60", command=self.apply_to_desktop)
+        apply_btn = ctk.CTkButton(action_btn_frame, text="Apply Wallpaper", width=140, font=("Segoe UI", 13, "bold"), command=self.apply_to_desktop)
         apply_btn.pack(side="right")
         
         self.info_lbl = ctk.CTkLabel(right_panel, text="Choose a wallpaper to generate the 3D effect preview.", font=("Segoe UI", 12), text_color="gray")

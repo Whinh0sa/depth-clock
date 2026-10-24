@@ -812,7 +812,7 @@ class DepthClockGUI(ctk.CTk):
                 preview_x, 
                 date_y, 
                 text=date_str, 
-                font=(font_family, preview_date_size, "bold"), 
+                font=(font_family, -preview_date_size, "bold"),
                 fill=self.config_data["color"], 
                 anchor="center"
             )
@@ -821,7 +821,7 @@ class DepthClockGUI(ctk.CTk):
             preview_x, 
             preview_y, 
             text=time_str, 
-            font=(font_family, preview_font_size, "bold"), 
+            font=(font_family, -preview_font_size, "bold"),
             fill=self.config_data["color"], 
             anchor="center"
         )

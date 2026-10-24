@@ -187,7 +187,7 @@ class DesktopRenderer:
             self.bg_item = self.canvas.create_image(0, 0, anchor="nw", image=self.bg_photo)
             
         # Set or create clock
-        font_tuple = (self.clock_font, self.clock_size, "bold")
+        font_tuple = (self.clock_font, -self.clock_size, "bold")
         if self.clock_item:
             self.canvas.coords(self.clock_item, self.clock_x, self.clock_y)
             self.canvas.itemconfig(self.clock_item, font=font_tuple, fill=self.clock_color)

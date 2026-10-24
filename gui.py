@@ -11,6 +11,8 @@ from PIL import Image, ImageTk, ImageFilter, ImageDraw, ImageFont
 import customtkinter as ctk
 import win32api
 import win32con
+import win32event
+import winerror
 import ctypes
 import winreg
 import sys
@@ -1132,6 +1134,14 @@ class DepthClockGUI(ctk.CTk):
         except Exception as e:
             self.set_status(f"Failed to start wallpaper daemon: {e}")
 
+# Global mutex handle to prevent garbage collection
+gui_mutex = None
+
 if __name__ == "__main__":
+    gui_mutex = win32event.CreateMutex(None, False, "DepthClockGUIMutex")
+    if win32api.GetLastError() == winerror.ERROR_ALREADY_EXISTS:
+        print("GUI is already running. Exiting.")
+        sys.exit(0)
+
     app = DepthClockGUI()
     app.mainloop()

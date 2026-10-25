@@ -92,6 +92,36 @@ class TestWallpaperDaemon(unittest.TestCase):
         center_pixel = result.getpixel((50, 50))
         self.assertEqual(center_pixel, (255, 255, 255))
 
+    def test_wallpaper_sources_urls(self):
+        """Test URL generation from wallpaper_sources."""
+        from wallpaper_sources import CURATED_WALLPAPERS, get_wallpaper_url
+        
+        # Test curated source
+        for category in CURATED_WALLPAPERS.keys():
+            url = get_wallpaper_url(category, 1920, 1080)
+            self.assertIn(url, CURATED_WALLPAPERS[category])
+            
+        # Test picsum sources
+        picsum_url = get_wallpaper_url("Picsum Photos (Random)", 1920, 1080)
+        self.assertTrue(picsum_url.startswith("https://picsum.photos/1920/1080?random="))
+        
+        gray_url = get_wallpaper_url("Picsum Photos (Grayscale)", 1920, 1080)
+        self.assertIn("&grayscale", gray_url)
+        
+        blur_url = get_wallpaper_url("Picsum Photos (Blur)", 1920, 1080)
+        self.assertIn("&blur", blur_url)
+
+    def test_interval_seconds_mapping(self):
+        """Verify daemon interval definitions."""
+        self.assertEqual(wallpaper_daemon.INTERVAL_SECONDS["15 Minutes"], 900)
+        self.assertEqual(wallpaper_daemon.INTERVAL_SECONDS["30 Minutes"], 1800)
+        self.assertEqual(wallpaper_daemon.INTERVAL_SECONDS["1 Hour"], 3600)
+        self.assertEqual(wallpaper_daemon.INTERVAL_SECONDS["3 Hours"], 10800)
+        self.assertEqual(wallpaper_daemon.INTERVAL_SECONDS["6 Hours"], 21600)
+        self.assertEqual(wallpaper_daemon.INTERVAL_SECONDS["12 Hours"], 43200)
+        self.assertEqual(wallpaper_daemon.INTERVAL_SECONDS["Daily"], 86400)
+
 
 if __name__ == '__main__':
     unittest.main()
+

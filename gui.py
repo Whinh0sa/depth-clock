@@ -47,28 +47,8 @@ PREMIUM_COLORS = [
     "#FF9933"  # Vibrant Orange
 ]
 
-# Curated wallpapers optimized for 3D depth clocks
-CURATED_WALLPAPERS = {
-    "Curated Nature (Unsplash)": [
-        "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?auto=format&fit=crop&q=80&w=1920",
-        "https://images.unsplash.com/photo-1447752875215-b2761acb3c5d?auto=format&fit=crop&q=80&w=1920",
-        "https://images.unsplash.com/photo-1472214222541-d510753a8707?auto=format&fit=crop&q=80&w=1920",
-        "https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&q=80&w=1920",
-        "https://images.unsplash.com/photo-1501854140801-50d01698950b?auto=format&fit=crop&q=80&w=1920"
-    ],
-    "Curated Space & Stars": [
-        "https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&q=80&w=1920",
-        "https://images.unsplash.com/photo-1506318137071-a8e063b4bec0?auto=format&fit=crop&q=80&w=1920",
-        "https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?auto=format&fit=crop&q=80&w=1920",
-        "https://images.unsplash.com/photo-1538370965046-79c0d6907d47?auto=format&fit=crop&q=80&w=1920"
-    ],
-    "Curated Cities & Architecture": [
-        "https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?auto=format&fit=crop&q=80&w=1920",
-        "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&q=80&w=1920",
-        "https://images.unsplash.com/photo-1449034446853-66c86144b0ad?auto=format&fit=crop&q=80&w=1920",
-        "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&q=80&w=1920"
-    ]
-}
+from wallpaper_sources import CURATED_WALLPAPERS, WALLPAPER_SOURCE_OPTIONS, get_wallpaper_url
+
 
 def get_file_hash(filepath):
     try:
@@ -182,7 +162,11 @@ class DepthClockGUI(ctk.CTk):
             "date_y_offset_ratio": -0.074,
             "sync_lockscreen": False,
             "auto_color": False,
-            "cutout_mode": "Gradient Depth (MiDaS)"
+            "cutout_mode": "Gradient Depth (MiDaS)",
+            "auto_change_enabled": False,
+            "auto_change_interval": "1 Hour",
+            "change_mode": "Online Curated",
+            "random_wp_source": "Picsum Photos (Random)"
         }
         
         self.load_saved_config()
@@ -300,8 +284,11 @@ class DepthClockGUI(ctk.CTk):
         
         # Wallpaper Source Selector
         ctk.CTkLabel(left_panel, text="Wallpaper Source", font=("Segoe UI", 12)).pack(anchor="w", padx=15, pady=(5, 2))
-        self.wp_source_dropdown = ctk.CTkComboBox(left_panel, width=380, values=["Picsum Photos (Random)", "Curated Nature (Unsplash)", "Curated Space & Stars", "Curated Cities & Architecture"])
-        self.wp_source_dropdown.set("Picsum Photos (Random)")
+        self.wp_source_dropdown = ctk.CTkComboBox(left_panel, width=380, values=WALLPAPER_SOURCE_OPTIONS, command=self.on_wp_source_changed)
+        saved_source = self.config_data.get("random_wp_source", "Picsum Photos (Random)")
+        if saved_source not in WALLPAPER_SOURCE_OPTIONS:
+            saved_source = "Picsum Photos (Random)"
+        self.wp_source_dropdown.set(saved_source)
         self.wp_source_dropdown.pack(fill="x", padx=15, pady=2)
         
         # Tabview for styling properties
@@ -475,6 +462,37 @@ class DepthClockGUI(ctk.CTk):
             self.startup_switch.deselect()
         self.startup_switch.grid(row=1, column=1, sticky="w", padx=10, pady=4)
         
+        self.auto_change_switch = ctk.CTkSwitch(sys_options_frame, text="Auto-Change Wallpaper", command=self.on_auto_change_toggled)
+        if self.config_data.get("auto_change_enabled", False):
+            self.auto_change_switch.select()
+        else:
+            self.auto_change_switch.deselect()
+        self.auto_change_switch.grid(row=1, column=2, sticky="w", padx=10, pady=4)
+
+        # Row 2: Interval and Mode
+        auto_opts_frame = ctk.CTkFrame(sys_options_frame, fg_color="transparent")
+        auto_opts_frame.grid(row=2, column=0, columnspan=3, sticky="we", padx=10, pady=(4, 2))
+        
+        ctk.CTkLabel(auto_opts_frame, text="Rotate Every:", font=("Segoe UI", 12)).pack(side="left", padx=(0, 6))
+        self.interval_dropdown = ctk.CTkComboBox(
+            auto_opts_frame,
+            width=130,
+            values=["15 Minutes", "30 Minutes", "1 Hour", "3 Hours", "6 Hours", "12 Hours", "Daily"],
+            command=self.on_interval_changed
+        )
+        self.interval_dropdown.set(self.config_data.get("auto_change_interval", "1 Hour"))
+        self.interval_dropdown.pack(side="left", padx=(0, 16))
+        
+        ctk.CTkLabel(auto_opts_frame, text="Rotate Source:", font=("Segoe UI", 12)).pack(side="left", padx=(0, 6))
+        self.change_mode_dropdown = ctk.CTkComboBox(
+            auto_opts_frame,
+            width=170,
+            values=["Online Curated", "Local Gallery History"],
+            command=self.on_change_mode_changed
+        )
+        self.change_mode_dropdown.set(self.config_data.get("change_mode", "Online Curated"))
+        self.change_mode_dropdown.pack(side="left")
+        
         # Action Buttons frame placed right below the System Options
         action_btn_frame = ctk.CTkFrame(right_panel, fg_color="transparent")
         action_btn_frame.pack(fill="x", padx=15, pady=10)
@@ -616,17 +634,13 @@ class DepthClockGUI(ctk.CTk):
             
     def fetch_random_wallpaper(self):
         source_selection = self.wp_source_dropdown.get()
-        self.set_status("Fetching random online wallpaper...")
+        self.set_status(f"Fetching online wallpaper...")
         self.enable_controls(False)
-        self.info_lbl.configure(text="Downloading high resolution photo...")
+        self.info_lbl.configure(text=f"Downloading high resolution photo ({source_selection})...")
         
         def run_fetch():
             try:
-                if source_selection in CURATED_WALLPAPERS:
-                    url = random.choice(CURATED_WALLPAPERS[source_selection])
-                else:
-                    sig = random.randint(1, 100000)
-                    url = f"https://picsum.photos/{self.screen_w}/{self.screen_h}?random={sig}"
+                url = get_wallpaper_url(source_selection, self.screen_w, self.screen_h)
                 
                 headers = {'User-Agent': 'Mozilla/5.0'}
                 req = urllib.request.Request(url, headers=headers)
@@ -904,6 +918,22 @@ class DepthClockGUI(ctk.CTk):
             self.config_data["color"] = self.extracted_colors[0]
             self.save_config()
             self.update_preview()
+            
+    def on_wp_source_changed(self, choice):
+        self.config_data["random_wp_source"] = choice
+        self.save_config()
+
+    def on_auto_change_toggled(self):
+        self.config_data["auto_change_enabled"] = bool(self.auto_change_switch.get())
+        self.save_config()
+
+    def on_interval_changed(self, choice):
+        self.config_data["auto_change_interval"] = choice
+        self.save_config()
+
+    def on_change_mode_changed(self, choice):
+        self.config_data["change_mode"] = choice
+        self.save_config()
             
     def on_cutout_mode_changed(self, value):
         self.config_data["cutout_mode"] = value

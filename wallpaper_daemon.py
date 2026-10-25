@@ -19,10 +19,28 @@ import pystray
 from pystray import MenuItem as item
 import base64
 
+from wallpaper_sources import CURATED_WALLPAPERS, get_wallpaper_url
+
 APP_DIR = os.path.join(os.path.expanduser("~"), ".depthclock")
 CONFIG_PATH = os.path.join(APP_DIR, "config.json")
 TEMP_WALLPAPER_PATH = os.path.join(APP_DIR, "depth_wallpaper.png")
 RANDOM_WP_PATH = os.path.join(APP_DIR, "random_wallpaper.jpg")
+GALLERY_DIR = os.path.join(APP_DIR, "gallery")
+GALLERY_DEPTH_DIR = os.path.join(APP_DIR, "gallery_depth")
+
+INTERVAL_SECONDS = {
+    "15 Minutes": 15 * 60,
+    "30 Minutes": 30 * 60,
+    "1 Hour": 60 * 60,
+    "3 Hours": 3 * 3600,
+    "6 Hours": 6 * 3600,
+    "12 Hours": 12 * 3600,
+    "Daily": 24 * 3600
+}
+
+_rotation_lock = threading.Lock()
+_last_rotation_time = time.time()
+
 
 # Enable DPI Awareness
 try:
@@ -236,43 +254,108 @@ def render_and_apply():
     return True
 
 def trigger_random_wallpaper():
+    global _last_rotation_time
+    if not _rotation_lock.acquire(blocking=False):
+        print("Wallpaper rotation already in progress, skipping.")
+        return
     try:
-        print("Fetching random wallpaper...")
-        sig = random.randint(1, 100000)
-        screen_w = win32api.GetSystemMetrics(0)
-        screen_h = win32api.GetSystemMetrics(1)
-        url = f"https://picsum.photos/{screen_w}/{screen_h}?random={sig}"
-        
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        req = urllib.request.Request(url, headers=headers)
-        
-        with urllib.request.urlopen(req) as response:
-            with open(RANDOM_WP_PATH, 'wb') as out_file:
-                out_file.write(response.read())
-                
-        # Generate depth map
-        from depth_engine import DepthEngine
-        engine = DepthEngine()
-        depth = engine.compute_depth(RANDOM_WP_PATH)
-        
-        full_depth_path = os.path.join(APP_DIR, "wallpaper_depth.png")
-        Image.fromarray(depth).save(full_depth_path)
-        
+        _last_rotation_time = time.time()
         if os.path.exists(CONFIG_PATH):
             with open(CONFIG_PATH, "r") as f:
                 config = json.load(f)
         else:
             config = {}
-            
+
+        change_mode = config.get("change_mode", "Online Curated")
+        random_wp_source = config.get("random_wp_source", "Picsum Photos (Random)")
+        cutout_mode = config.get("cutout_mode", "Gradient Depth (MiDaS)")
+        current_wp = config.get("wallpaper_path", "")
+
+        # Try gallery mode if selected
+        if change_mode == "Local Gallery History" and os.path.exists(GALLERY_DIR) and os.path.exists(GALLERY_DEPTH_DIR):
+            candidates = []
+            for f in os.listdir(GALLERY_DIR):
+                if f.endswith(".png"):
+                    wp_f = os.path.join(GALLERY_DIR, f)
+                    dp_f = os.path.join(GALLERY_DEPTH_DIR, f)
+                    if os.path.exists(dp_f):
+                        candidates.append((wp_f, dp_f))
+
+            if candidates:
+                if len(candidates) > 1:
+                    pool = [c for c in candidates if c[0] != current_wp]
+                    selected = random.choice(pool if pool else candidates)
+                else:
+                    selected = candidates[0]
+
+                print(f"Rotating from gallery: {selected[0]}")
+                config["wallpaper_path"] = selected[0]
+                config["depth_map_path"] = selected[1]
+                with open(CONFIG_PATH, "w") as f:
+                    json.dump(config, f, indent=4)
+                render_and_apply()
+                return
+
+        # Online Curated mode
+        print(f"Fetching online wallpaper from source: {random_wp_source}...")
+        screen_w = win32api.GetSystemMetrics(0)
+        screen_h = win32api.GetSystemMetrics(1)
+        url = get_wallpaper_url(random_wp_source, screen_w, screen_h)
+
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        req = urllib.request.Request(url, headers=headers)
+
+        os.makedirs(APP_DIR, exist_ok=True)
+        with urllib.request.urlopen(req) as response:
+            with open(RANDOM_WP_PATH, 'wb') as out_file:
+                out_file.write(response.read())
+
+        # Generate depth/cutout map
+        from depth_engine import DepthEngine
+        engine = DepthEngine()
+
+        if "Salient Subject" in cutout_mode:
+            model_type = "u2net" if "176MB" in cutout_mode else "u2netp"
+            u2net_path = os.path.join(APP_DIR, "u2net.onnx" if model_type == "u2net" else "u2netp.onnx")
+            if not os.path.exists(u2net_path):
+                from depth_engine import download_u2net
+                download_u2net(model_type)
+            depth = engine.compute_subject_mask(RANDOM_WP_PATH, model_type)
+        else:
+            depth = engine.compute_depth(RANDOM_WP_PATH)
+
+        full_depth_path = os.path.join(APP_DIR, "wallpaper_depth.png")
+        Image.fromarray(depth).save(full_depth_path)
+
+        # Cache in gallery
+        try:
+            import hashlib
+            import shutil
+            os.makedirs(GALLERY_DIR, exist_ok=True)
+            os.makedirs(GALLERY_DEPTH_DIR, exist_ok=True)
+            with open(RANDOM_WP_PATH, 'rb') as f:
+                h = hashlib.sha256(f.read()).hexdigest()
+            cached_wp = os.path.join(GALLERY_DIR, f"{h}.png")
+            cached_depth = os.path.join(GALLERY_DEPTH_DIR, f"{h}.png")
+            if not os.path.exists(cached_wp):
+                shutil.copy(RANDOM_WP_PATH, cached_wp)
+            if not os.path.exists(cached_depth):
+                shutil.copy(full_depth_path, cached_depth)
+        except Exception as cache_err:
+            print("Failed to cache in gallery:", cache_err)
+
         config["wallpaper_path"] = RANDOM_WP_PATH
         config["depth_map_path"] = full_depth_path
-        
+
         with open(CONFIG_PATH, "w") as f:
             json.dump(config, f, indent=4)
-            
+
         print("Random wallpaper processed and saved.")
+        render_and_apply()
     except Exception as e:
         print("Error fetching random wallpaper:", e)
+    finally:
+        _rotation_lock.release()
 
 # Tray actions
 def on_quit(icon, item):
@@ -297,6 +380,8 @@ def on_launch_settings(icon, item):
     subprocess.Popen(cmd, cwd=cwd)
 
 def on_next_wallpaper(icon, item):
+    global _last_rotation_time
+    _last_rotation_time = time.time()
     threading.Thread(target=trigger_random_wallpaper, daemon=True).start()
 
 def create_tray_icon():
@@ -322,7 +407,7 @@ def create_tray_icon():
     return icon
 
 def daemon_loop():
-    global paused, running
+    global paused, running, _last_rotation_time
     screen_w = win32api.GetSystemMetrics(0)
     screen_h = win32api.GetSystemMetrics(1)
     
@@ -352,12 +437,28 @@ def daemon_loop():
         current_minute = current_time_struct.tm_min
         
         config_modified = False
+        config = {}
         if os.path.exists(CONFIG_PATH):
-            mtime = os.path.getmtime(CONFIG_PATH)
-            if mtime > last_config_mtime:
-                last_config_mtime = mtime
-                config_modified = True
+            try:
+                mtime = os.path.getmtime(CONFIG_PATH)
+                if mtime > last_config_mtime:
+                    last_config_mtime = mtime
+                    config_modified = True
+                with open(CONFIG_PATH, "r") as f:
+                    config = json.load(f)
+            except Exception:
+                pass
                 
+        # Check auto-change wallpaper interval
+        if config.get("auto_change_enabled", False):
+            interval_str = config.get("auto_change_interval", "1 Hour")
+            interval_sec = INTERVAL_SECONDS.get(interval_str, 3600)
+            now = time.time()
+            if (now - _last_rotation_time) >= interval_sec:
+                print(f"Auto-change interval reached ({interval_str}). Rotating wallpaper...")
+                _last_rotation_time = now
+                threading.Thread(target=trigger_random_wallpaper, daemon=True).start()
+
         if current_minute != last_minute or config_modified:
             last_minute = current_minute
             print(f"Updating wallpaper: {time.strftime('%H:%M:%S')}")

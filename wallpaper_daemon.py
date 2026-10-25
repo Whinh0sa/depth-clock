@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 import json
 import ctypes
@@ -12,6 +13,8 @@ import win32api
 import win32gui
 import win32con
 import win32process
+import win32event
+import winerror
 import pystray
 from pystray import MenuItem as item
 import base64
@@ -365,7 +368,16 @@ def daemon_loop():
                 
         time.sleep(1.0)
 
+# Global mutex handle to prevent garbage collection
+daemon_mutex = None
+
 def main():
+    global daemon_mutex
+    daemon_mutex = win32event.CreateMutex(None, False, "DepthClockDaemonMutex")
+    if win32api.GetLastError() == winerror.ERROR_ALREADY_EXISTS:
+        print("Daemon is already running. Exiting.")
+        sys.exit(0)
+
     # Start loop in a background thread
     loop_thread = threading.Thread(target=daemon_loop, daemon=True)
     loop_thread.start()

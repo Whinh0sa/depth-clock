@@ -20,6 +20,7 @@ from pystray import MenuItem as item
 import base64
 
 from wallpaper_sources import CURATED_WALLPAPERS, get_wallpaper_url
+from auto_optimizer import resolve_font_path, auto_optimize_depth_clock
 
 APP_DIR = os.path.join(os.path.expanduser("~"), ".depthclock")
 CONFIG_PATH = os.path.join(APP_DIR, "config.json")
@@ -182,10 +183,11 @@ def render_and_apply():
     pos_y = int(screen_h * config.get("pos_y_ratio", 0.3))
     
     try:
-        font_path = os.path.join(os.environ.get("WINDIR", "C:\\Windows"), "Fonts", f"{font_family.lower()}.ttf")
-        if not os.path.exists(font_path):
-            font_path = os.path.join(os.environ.get("WINDIR", "C:\\Windows"), "Fonts", "arialbd.ttf")
-        font = ImageFont.truetype(font_path, font_size)
+        resolved_path = resolve_font_path(font_family)
+        if resolved_path and os.path.exists(resolved_path):
+            font = ImageFont.truetype(resolved_path, font_size)
+        else:
+            font = ImageFont.load_default()
     except:
         font = ImageFont.load_default()
         
@@ -193,10 +195,11 @@ def render_and_apply():
         date_str = time.strftime(config.get("date_format", "%a, %b %d"))
         date_font_size = max(12, int(font_size * 0.3))
         try:
-            date_font_path = os.path.join(os.environ.get("WINDIR", "C:\\Windows"), "Fonts", f"{font_family.lower()}.ttf")
-            if not os.path.exists(date_font_path):
-                date_font_path = os.path.join(os.environ.get("WINDIR", "C:\\Windows"), "Fonts", "arialbd.ttf")
-            date_font = ImageFont.truetype(date_font_path, date_font_size)
+            resolved_path = resolve_font_path(font_family)
+            if resolved_path and os.path.exists(resolved_path):
+                date_font = ImageFont.truetype(resolved_path, date_font_size)
+            else:
+                date_font = ImageFont.load_default()
         except:
             date_font = ImageFont.load_default()
             
@@ -346,6 +349,19 @@ def trigger_random_wallpaper():
 
         config["wallpaper_path"] = RANDOM_WP_PATH
         config["depth_map_path"] = full_depth_path
+
+        # Automatically optimize depth clock layout for seamless overlap and contrast
+        try:
+            opt = auto_optimize_depth_clock(
+                Image.open(RANDOM_WP_PATH),
+                Image.fromarray(depth),
+                screen_w,
+                screen_h
+            )
+            config.update(opt)
+            print("Auto-optimized layout:", opt)
+        except Exception as opt_err:
+            print("Auto-optimization warning:", opt_err)
 
         with open(CONFIG_PATH, "w") as f:
             json.dump(config, f, indent=4)

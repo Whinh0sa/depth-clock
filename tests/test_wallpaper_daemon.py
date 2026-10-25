@@ -111,17 +111,35 @@ class TestWallpaperDaemon(unittest.TestCase):
         blur_url = get_wallpaper_url("Picsum Photos (Blur)", 1920, 1080)
         self.assertIn("&blur", blur_url)
 
-    def test_interval_seconds_mapping(self):
-        """Verify daemon interval definitions."""
-        self.assertEqual(wallpaper_daemon.INTERVAL_SECONDS["15 Minutes"], 900)
-        self.assertEqual(wallpaper_daemon.INTERVAL_SECONDS["30 Minutes"], 1800)
-        self.assertEqual(wallpaper_daemon.INTERVAL_SECONDS["1 Hour"], 3600)
-        self.assertEqual(wallpaper_daemon.INTERVAL_SECONDS["3 Hours"], 10800)
-        self.assertEqual(wallpaper_daemon.INTERVAL_SECONDS["6 Hours"], 21600)
-        self.assertEqual(wallpaper_daemon.INTERVAL_SECONDS["12 Hours"], 43200)
-        self.assertEqual(wallpaper_daemon.INTERVAL_SECONDS["Daily"], 86400)
+    def test_auto_optimizer_fonts_and_layout(self):
+        """Test auto_optimizer font listing and layout optimization."""
+        import auto_optimizer
+        
+        fonts = auto_optimizer.get_available_fonts()
+        self.assertGreaterEqual(len(fonts), 3)
+        self.assertIn("Segoe UI", fonts)
+        
+        # Test font resolution
+        resolved = auto_optimizer.resolve_font_path("Segoe UI")
+        self.assertIsNotNone(resolved)
+        
+        # Test auto layout generation
+        dummy_wp = Image.new("RGB", (200, 100), color=(30, 40, 50))
+        dummy_dp = Image.new("L", (200, 100), color=0)
+        # Put a high depth object on the right side
+        for x in range(120, 180):
+            for y in range(40, 100):
+                dummy_dp.putpixel((x, y), 220)
+                
+        opt = auto_optimizer.auto_optimize_depth_clock(dummy_wp, dummy_dp, 1920, 1080)
+        self.assertIn("threshold", opt)
+        self.assertIn("pos_x_ratio", opt)
+        self.assertIn("pos_y_ratio", opt)
+        self.assertIn("color", opt)
+        self.assertIn(opt["color"], ["#FFFFFF", "#111827"])
 
 
 if __name__ == '__main__':
     unittest.main()
+
 

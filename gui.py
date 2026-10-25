@@ -34,7 +34,7 @@ from depth_engine import DepthEngine, download_model, APP_DIR, MODEL_PATH
 CONFIG_PATH = os.path.join(APP_DIR, "config.json")
 RANDOM_WP_PATH = os.path.join(APP_DIR, "random_wallpaper.jpg")
 GALLERY_DIR = os.path.join(APP_DIR, "gallery")
-GALLERY_DEPTH_DIR = os.path.join(APP_DIR, "gallery_depths")
+GALLERY_DEPTH_DIR = os.path.join(APP_DIR, "gallery_depth")
 
 PREMIUM_COLORS = [
     "#FFFFFF", # White
@@ -48,6 +48,8 @@ PREMIUM_COLORS = [
 ]
 
 from wallpaper_sources import CURATED_WALLPAPERS, WALLPAPER_SOURCE_OPTIONS, get_wallpaper_url
+from auto_optimizer import get_available_fonts, auto_optimize_depth_clock
+
 
 
 def get_file_hash(filepath):
@@ -219,6 +221,7 @@ class DepthClockGUI(ctk.CTk):
         self.rand_wp_btn.configure(state=val)
         self.import_pkg_btn.configure(state=val)
         self.export_pkg_btn.configure(state=val)
+        self.auto_layout_btn.configure(state=val)
         self.rand_style_btn.configure(state=val)
         self.save_img_btn.configure(state=val)
         
@@ -338,8 +341,12 @@ class DepthClockGUI(ctk.CTk):
         
         # --- CLOCK STYLE TAB ---
         ctk.CTkLabel(clock_tab, text="Font Family", font=("Segoe UI", 13, "bold")).pack(anchor="w", pady=(5, 5))
-        self.font_combobox = ctk.CTkComboBox(clock_tab, values=["Segoe UI", "Arial", "Impact", "Georgia", "Courier New"], command=self.on_font_changed)
-        self.font_combobox.set(self.config_data["font_family"])
+        self.available_fonts = get_available_fonts()
+        self.font_combobox = ctk.CTkComboBox(clock_tab, values=self.available_fonts, command=self.on_font_changed)
+        saved_font = self.config_data.get("font_family", "Segoe UI")
+        if saved_font not in self.available_fonts:
+            saved_font = self.available_fonts[0]
+        self.font_combobox.set(saved_font)
         self.font_combobox.pack(fill="x", pady=5)
         
         ctk.CTkLabel(clock_tab, text="Font Size", font=("Segoe UI", 13, "bold")).pack(anchor="w", pady=(5, 5))
@@ -503,10 +510,13 @@ class DepthClockGUI(ctk.CTk):
         self.export_pkg_btn = ctk.CTkButton(action_btn_frame, text="Export", width=90, fg_color="transparent", border_width=1, text_color=("gray10", "#DCE4EE"), command=self.export_depthpkg, state="disabled")
         self.export_pkg_btn.pack(side="left", padx=(0, 6))
         
-        self.rand_style_btn = ctk.CTkButton(action_btn_frame, text="Random Style", width=100, fg_color="transparent", border_width=1, text_color=("gray10", "#DCE4EE"), command=self.randomize_styles, state="disabled")
+        self.auto_layout_btn = ctk.CTkButton(action_btn_frame, text="✨ Auto-Fit (AI)", width=105, fg_color="#1f538d", hover_color="#14375e", text_color="white", font=("Segoe UI", 12, "bold"), command=self.apply_auto_layout, state="disabled")
+        self.auto_layout_btn.pack(side="left", padx=(0, 6))
+        
+        self.rand_style_btn = ctk.CTkButton(action_btn_frame, text="Random Style", width=95, fg_color="transparent", border_width=1, text_color=("gray10", "#DCE4EE"), command=self.randomize_styles, state="disabled")
         self.rand_style_btn.pack(side="left", padx=(0, 6))
         
-        self.save_img_btn = ctk.CTkButton(action_btn_frame, text="Save Image", width=100, fg_color="transparent", border_width=1, text_color=("gray10", "#DCE4EE"), command=self.save_standalone_wallpaper, state="disabled")
+        self.save_img_btn = ctk.CTkButton(action_btn_frame, text="Save Image", width=85, fg_color="transparent", border_width=1, text_color=("gray10", "#DCE4EE"), command=self.save_standalone_wallpaper, state="disabled")
         self.save_img_btn.pack(side="left", padx=(0, 6))
         
         apply_btn = ctk.CTkButton(action_btn_frame, text="Apply Wallpaper", width=140, font=("Segoe UI", 13, "bold"), command=self.apply_to_desktop)
@@ -661,6 +671,62 @@ class DepthClockGUI(ctk.CTk):
                 
         threading.Thread(run_fetch, daemon=True).start()
         
+    def apply_auto_layout(self):
+        """
+        AI Auto-Fit: analyzes wallpaper & depth map composition and automatically sets:
+        - Optimal foreground threshold for clean edges and natural overlap
+        - Optimal (X, Y) clock position so the clock peeks behind the subject with subtle 10-25% overlap
+        - WCAG contrast-calculated text color (White vs Dark Charcoal)
+        - Proportional font size
+        """
+        if not self.wallpaper_path or not os.path.exists(self.wallpaper_path):
+            self.set_status("No wallpaper loaded.")
+            return
+            
+        depth_map_path = self.config_data.get("depth_map_path", "")
+        if not depth_map_path or not os.path.exists(depth_map_path):
+            self.set_status("Depth map not available yet.")
+            return
+            
+        try:
+            self.set_status("AI analyzing composition & overlap...")
+            wp_img = Image.open(self.wallpaper_path)
+            dp_img = Image.open(depth_map_path)
+            
+            opt = auto_optimize_depth_clock(wp_img, dp_img, self.screen_w, self.screen_h)
+            
+            # Apply to config
+            self.config_data["threshold"] = opt["threshold"]
+            self.config_data["pos_x_ratio"] = opt["pos_x_ratio"]
+            self.config_data["pos_y_ratio"] = opt["pos_y_ratio"]
+            self.config_data["color"] = opt["color"]
+            self.config_data["font_size"] = opt["font_size"]
+            self.config_data["blur_radius"] = opt["blur_radius"]
+            self.config_data["transition_width"] = opt["transition_width"]
+            self.save_config()
+            
+            # Update GUI controls
+            self.threshold_slider.set(opt["threshold"])
+            self.threshold_val_lbl.configure(text=f"Value: {opt['threshold']}")
+            
+            self.pos_x_slider.set(opt["pos_x_ratio"])
+            self.pos_y_slider.set(opt["pos_y_ratio"])
+            
+            self.font_size_slider.set(opt["font_size"])
+            self.font_size_val_lbl.configure(text=f"{opt['font_size']} px")
+            
+            self.blur_slider.set(opt["blur_radius"])
+            self.blur_val_lbl.configure(text=f"Radius: {opt['blur_radius']}px")
+            
+            self.transition_slider.set(opt["transition_width"])
+            self.transition_val_lbl.configure(text=f"Width: {opt['transition_width']}px")
+            
+            self.update_preview()
+            self.set_status("✨ Auto-Fit applied! Clock positioned with subtle depth overlap.")
+            self.info_lbl.configure(text=f"AI suggested: threshold={opt['threshold']}, overlap pos=({opt['pos_x_ratio']}, {opt['pos_y_ratio']})")
+        except Exception as e:
+            self.set_status(f"Auto-Fit failed: {e}")
+
     def randomize_styles(self):
         color_pool = PREMIUM_COLORS
         if hasattr(self, 'extracted_colors') and self.extracted_colors:
@@ -669,7 +735,8 @@ class DepthClockGUI(ctk.CTk):
         color = random.choice(color_pool)
         self.config_data["color"] = color
         
-        font = random.choice(["Segoe UI", "Arial", "Impact", "Georgia", "Courier New"])
+        font_pool = getattr(self, "available_fonts", ["Segoe UI", "Arial", "Impact", "Georgia", "Courier New"])
+        font = random.choice(font_pool)
         self.font_combobox.set(font)
         self.config_data["font_family"] = font
         
@@ -760,11 +827,13 @@ class DepthClockGUI(ctk.CTk):
     def on_processing_complete(self):
         self.set_status("Ready.")
         self.enable_controls(True)
-        self.info_lbl.configure(text="Use depth slider to adjust layers. Click Apply to save.")
+        self.info_lbl.configure(text="AI applied optimal depth overlap & contrast. Click Apply to save.")
         
-        if self.config_data.get("auto_color", False) and hasattr(self, 'extracted_colors') and self.extracted_colors:
-            self.config_data["color"] = self.extracted_colors[0]
-            self.save_config()
+        # Automatically run AI Auto-Fit for instant, seamless depth effect
+        try:
+            self.apply_auto_layout()
+        except Exception as e:
+            print("Auto layout on complete notice:", e)
             
         self.update_suggested_colors()
         self.update_preview()
